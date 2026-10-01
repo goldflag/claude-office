@@ -1,0 +1,26 @@
+{
+  "name": "claude-office",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch server/index.ts",
+    "start": "NODE_ENV=production bun server/index.ts",
+    "assets": "blender -b -P assets/build_assets.py",
+    "hooks:install": "bun scripts/hooks.ts install",
+    "hooks:uninstall": "bun scripts/hooks.ts uninstall",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/three": "^0.186.0",
+    "typescript": "^7.0.2"
+  }
+}
