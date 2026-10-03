@@ -7,13 +7,14 @@ import type {
   NeedsYou,
   OfficeSnapshot,
   OrcaLink,
+  ScrollbackView,
   SendResult,
   SubagentSnapshot,
   TerminalView,
   ToolCall,
 } from "../shared/types.ts";
 import { inspectProcess, Orca, OrcaError, type ProcessHost } from "./orca.ts";
-import { TranscriptTail, type TranscriptState } from "./transcript.ts";
+import { readScrollback, TranscriptTail, type TranscriptState } from "./transcript.ts";
 
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude");
 /** Set OFFICE_READ_ONLY=1 to run the office as a pure viewer. */
@@ -489,6 +490,13 @@ export class Office {
   /** What the agent's terminal screen shows right now. */
   async readTerminal(id: string): Promise<TerminalView> {
     return { lines: await this.orca.screen(this.terminalOf(id).handle) };
+  }
+
+  /** The session's earlier activity, from its transcript, for scrolling back on the terminal screen. */
+  async scrollback(id: string): Promise<ScrollbackView> {
+    const agent = this.agents.get(Number(id));
+    if (!agent) throw new OrcaError("That session is no longer running.", "gone");
+    return { entries: agent.tail ? await readScrollback(agent.tail.path) : [] };
   }
 
   /** Brings the agent's terminal to the front in Orca. */

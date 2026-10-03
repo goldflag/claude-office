@@ -69,6 +69,7 @@ const server = Bun.serve({
       },
     },
     "/api/agents/:id/terminal": (req) => (isLocal(req) ? act(() => office.readTerminal(req.params.id)) : forbidden()),
+    "/api/agents/:id/scrollback": (req) => (isLocal(req) ? act(() => office.scrollback(req.params.id)) : forbidden()),
     "/api/agents/:id/focus": {
       POST: (req) => (mayAct(req) ? act(() => office.focus(req.params.id)) : forbidden()),
     },

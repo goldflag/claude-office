@@ -6,30 +6,28 @@ interface Props {
   snapshot: OfficeSnapshot | null;
   timeMode: TimeMode;
   sceneRef: RefObject<OfficeScene | null>;
-  /** The terminal element the scene pins onto the selected agent's monitor. */
-  screenRef: RefObject<HTMLElement | null>;
+  /** True while something covers the whole office, so it need not be drawn. */
+  paused: boolean;
   onSelect(id: string | null): void;
 }
 
 /** Mounts the three.js office and feeds it snapshots. */
-export function OfficeCanvas({ snapshot, timeMode, sceneRef, screenRef, onSelect }: Props) {
+export function OfficeCanvas({ snapshot, timeMode, sceneRef, paused, onSelect }: Props) {
   const host = useRef<HTMLDivElement>(null);
-  const latest = useRef({ snapshot, timeMode, onSelect });
-  latest.current = { snapshot, timeMode, onSelect };
+  const latest = useRef({ snapshot, timeMode, paused, onSelect });
+  latest.current = { snapshot, timeMode, paused, onSelect };
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     let scene: OfficeScene | null = null;
-    OfficeScene.create(host.current!, {
-      onSelect: (id) => latest.current.onSelect(id),
-      screen: () => screenRef.current,
-    })
+    OfficeScene.create(host.current!, { onSelect: (id) => latest.current.onSelect(id) })
       .then((created) => {
         if (cancelled) return created.dispose();
         scene = created;
         sceneRef.current = created;
         created.setTimeMode(latest.current.timeMode);
+        created.setPaused(latest.current.paused);
         if (latest.current.snapshot) created.setSnapshot(latest.current.snapshot);
       })
       .catch((err) => setError(err instanceof Error ? err.message : String(err)));
@@ -38,7 +36,7 @@ export function OfficeCanvas({ snapshot, timeMode, sceneRef, screenRef, onSelect
       scene?.dispose();
       sceneRef.current = null;
     };
-  }, [sceneRef, screenRef]);
+  }, [sceneRef]);
 
   useEffect(() => {
     if (snapshot) sceneRef.current?.setSnapshot(snapshot);
@@ -47,6 +45,10 @@ export function OfficeCanvas({ snapshot, timeMode, sceneRef, screenRef, onSelect
   useEffect(() => {
     sceneRef.current?.setTimeMode(timeMode);
   }, [timeMode, sceneRef]);
+
+  useEffect(() => {
+    sceneRef.current?.setPaused(paused);
+  }, [paused, sceneRef]);
 
   return (
     <div ref={host} className="office" role="img" aria-label="3D office showing each Claude agent at a desk">

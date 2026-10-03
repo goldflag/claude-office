@@ -19,7 +19,6 @@ export class Screen {
   readonly material: THREE.MeshBasicMaterial;
   private ctx: CanvasRenderingContext2D;
   private lastDraw = -1;
-  private blanked: string | null = null;
   private seed = Math.random() * 1000;
 
   constructor() {
@@ -32,22 +31,11 @@ export class Screen {
     this.material = new THREE.MeshBasicMaterial({ map: this.texture });
   }
 
-  /** Fills the screen with one color. */
-  blank(color: string) {
-    if (this.blanked === color) return;
-    this.blanked = color;
-    this.lastDraw = -1;
-    this.ctx.fillStyle = color;
-    this.ctx.fillRect(0, 0, W, H);
-    this.texture.needsUpdate = true;
-  }
-
   /** Redraws at most ten times a second; screens do not need more. */
   draw(activity: Activity, t: number) {
     const frame = Math.floor(t * 10);
     if (frame === this.lastDraw) return;
     this.lastDraw = frame;
-    this.blanked = null;
     const c = this.ctx;
     const s = this.seed;
 

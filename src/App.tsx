@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AgentSnapshot } from "../shared/types.ts";
-import { MonitorTerminal } from "./ui/MonitorTerminal.tsx";
+import { AgentTerminal } from "./ui/AgentTerminal.tsx";
 import { OfficeCanvas } from "./ui/OfficeCanvas.tsx";
 import { Roster } from "./ui/Roster.tsx";
 import { projectColors as assignProjectColors } from "./scene/layout.ts";
@@ -35,7 +35,6 @@ export function App() {
   const [selected, setSelected] = useState<string | null>(null);
   const [timeMode, setTimeMode] = useState<TimeMode>(initialTimeMode);
   const scene = useRef<OfficeScene | null>(null);
-  const screen = useRef<HTMLDivElement>(null);
 
   const agents: AgentSnapshot[] = snapshot?.agents ?? [];
   const projectKey = [...new Set(agents.map((a) => a.project))].sort().join("|");
@@ -72,49 +71,45 @@ export function App() {
         snapshot={snapshot}
         timeMode={timeMode}
         sceneRef={scene}
-        screenRef={screen}
+        paused={selectedAgent !== null}
         onSelect={select}
       />
 
+      {/* While a terminal fills the view, what is behind it is out of reach of the keyboard too. */}
+      <div inert={selectedAgent !== null}>
+        <Roster
+          agents={agents}
+          loaded={snapshot !== null}
+          hooksInstalled={snapshot?.hooksInstalled ?? true}
+          selected={selected}
+          projectColors={projectColors}
+          onSelect={select}
+        />
+
+        <div className="view-controls">
+          <div className="segmented" role="group" aria-label="Lighting">
+            {TIME_MODES.map((m) => (
+              <button key={m.value} aria-pressed={timeMode === m.value} onClick={() => setTimeMode(m.value)}>
+                {m.label}
+              </button>
+            ))}
+          </div>
+          <button className="plain-button" onClick={() => scene.current?.resetView()}>
+            Show whole office
+          </button>
+        </div>
+
+        <p className="hint">Drag to move, right-drag to turn, scroll to zoom. Click a Clawd to open its terminal.</p>
+      </div>
+
       {selectedAgent && (
-        <MonitorTerminal
+        <AgentTerminal
           key={selectedAgent.id}
-          ref={screen}
           agent={selectedAgent}
           canSend={snapshot?.canSend ?? false}
           onClose={() => select(null)}
         />
       )}
-
-      <Roster
-        agents={agents}
-        loaded={snapshot !== null}
-        hooksInstalled={snapshot?.hooksInstalled ?? true}
-        selected={selected}
-        projectColors={projectColors}
-        onSelect={select}
-      />
-
-      <div className="view-controls">
-        <div className="segmented" role="group" aria-label="Lighting">
-          {TIME_MODES.map((m) => (
-            <button key={m.value} aria-pressed={timeMode === m.value} onClick={() => setTimeMode(m.value)}>
-              {m.label}
-            </button>
-          ))}
-        </div>
-        <button
-          className="plain-button"
-          onClick={() => {
-            select(null);
-            scene.current?.resetView();
-          }}
-        >
-          Show whole office
-        </button>
-      </div>
-
-      <p className="hint">Drag to move, right-drag to turn, scroll to zoom. Click a Clawd to look at its screen.</p>
 
       {!connected && (
         <div className="notice" role="status">

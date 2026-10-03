@@ -1,4 +1,4 @@
-import type { SendResult, TerminalView } from "../shared/types.ts";
+import type { ActionEntry, ScrollbackView, SendResult, TerminalView } from "../shared/types.ts";
 
 export const isDemo = new URLSearchParams(location.search).has("demo");
 
@@ -52,4 +52,10 @@ export async function openInOrca(id: string): Promise<void> {
 export async function readTerminal(id: string): Promise<TerminalView> {
   if (isDemo) return { lines: DEMO_SCREEN };
   return call<TerminalView>(`/api/agents/${id}/terminal`);
+}
+
+/** The session's earlier prompts, replies and tool calls, oldest first. The demo has no transcripts to read. */
+export async function readScrollback(id: string): Promise<ActionEntry[]> {
+  if (isDemo) return [];
+  return (await call<ScrollbackView>(`/api/agents/${id}/scrollback`)).entries;
 }

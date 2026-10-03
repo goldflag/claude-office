@@ -1,9 +1,23 @@
 import { open, stat } from "node:fs/promises";
 import type { ActionEntry, ToolCall } from "../shared/types.ts";
 
-const MAX_RECENT = 40;
 /** On first read, only this much of the end of a transcript is replayed. */
 const INITIAL_TAIL_BYTES = 1_500_000;
+/** How much of a transcript the terminal's scrollback reads. */
+const SCROLLBACK_BYTES = 4_000_000;
+
+/** How many activity entries a state keeps, and how much of each. */
+export interface Keep {
+  entries: number;
+  chars: number;
+  /** Keep the line breaks in prompts and replies, rather than flattening each to one line. */
+  lines: boolean;
+}
+
+/** Enough for the snapshot sent to the board on every change. */
+const RECENT: Keep = { entries: 40, chars: 160, lines: false };
+/** Enough to scroll back through a session on the terminal screen. */
+const SCROLLBACK: Keep = { entries: 400, chars: 6000, lines: true };
 
 /** State folded from a transcript, shared by main sessions and subagents. */
 export interface TranscriptState {
@@ -21,9 +35,10 @@ export interface TranscriptState {
   permissionMode: string | null;
   lastError: number | null;
   recent: ActionEntry[];
+  keep: Keep;
 }
 
-export function emptyState(): TranscriptState {
+export function emptyState(keep = RECENT): TranscriptState {
   return {
     pending: new Map(),
     lastTool: null,
@@ -39,6 +54,7 @@ export function emptyState(): TranscriptState {
     permissionMode: null,
     lastError: null,
     recent: [],
+    keep,
   };
 }
 
@@ -91,8 +107,10 @@ export function toolLabel(name: string): string {
 }
 
 function push(state: TranscriptState, entry: ActionEntry) {
-  state.recent.push(entry);
-  if (state.recent.length > MAX_RECENT) state.recent.shift();
+  const { chars, lines, entries } = state.keep;
+  const detail = lines ? entry.detail.trim() : entry.detail.replace(/\s+/g, " ").trim();
+  state.recent.push({ ...entry, detail: detail.length > chars ? detail.slice(0, chars - 1) + "…" : detail });
+  if (state.recent.length > entries) state.recent.shift();
 }
 
 function textOf(content: unknown): string {
@@ -158,7 +176,7 @@ export function applyRecord(state: TranscriptState, rec: any, opts: { sidechain:
           state.pending.set(call.id, call);
           push(state, { at: call.startedAt, kind: "tool", label: toolLabel(call.name), detail: call.summary });
         } else if (block?.type === "text" && typeof block.text === "string" && block.text.trim()) {
-          push(state, { at, kind: "text", label: "says", detail: clip(block.text, 160) });
+          push(state, { at, kind: "text", label: "says", detail: block.text });
         }
       }
       return;
@@ -181,7 +199,7 @@ export function applyRecord(state: TranscriptState, rec: any, opts: { sidechain:
               at,
               kind: "error",
               label: call ? toolLabel(call.name) : "tool",
-              detail: clip(textOf(block.content) || String(block.content ?? ""), 140),
+              detail: textOf(block.content) || String(block.content ?? ""),
             });
           }
         }
@@ -195,10 +213,35 @@ export function applyRecord(state: TranscriptState, rec: any, opts: { sidechain:
       state.pending.clear();
       state.turnActive = true;
       state.lastPrompt = clip(text, 400);
-      push(state, { at, kind: "prompt", label: "you", detail: clip(text, 160) });
+      push(state, { at, kind: "prompt", label: "you", detail: text });
       return;
     }
   }
+}
+
+/** The activity near the end of a transcript, with prompts and replies kept whole, for scrolling back through. */
+export async function readScrollback(path: string): Promise<ActionEntry[]> {
+  const { size } = await stat(path);
+  const start = Math.max(0, size - SCROLLBACK_BYTES);
+  const fh = await open(path, "r");
+  const buf = Buffer.alloc(size - start);
+  try {
+    await fh.read(buf, 0, buf.length, start);
+  } finally {
+    await fh.close();
+  }
+  const state = emptyState(SCROLLBACK);
+  const lines = buf.toString("utf8").split("\n");
+  // Starting mid-file lands inside a line, so the first one is partial.
+  for (const line of start > 0 ? lines.slice(1) : lines) {
+    if (!line) continue;
+    try {
+      applyRecord(state, JSON.parse(line), { sidechain: false });
+    } catch {
+      // A torn or non-JSON line is skipped.
+    }
+  }
+  return state.recent;
 }
 
 /** Follows one JSONL transcript, folding each new line into a TranscriptState. */

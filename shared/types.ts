@@ -104,6 +104,11 @@ export interface TerminalView {
   lines: string[];
 }
 
+/** A session's activity with prompts and replies kept whole, oldest first. */
+export interface ScrollbackView {
+  entries: ActionEntry[];
+}
+
 export interface SendResult {
   /** True once the agent's turn was seen to start; false means the message is queued. */
   started: boolean;

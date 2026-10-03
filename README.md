@@ -82,20 +82,21 @@ in through the door when their session becomes active.
 
 The board on the left lists every agent, most urgent first.
 
-## Looking at a screen
+## Opening a terminal
 
-Click a Clawd, or its row on the board, and the camera flies into its monitor
-while the Clawd hops off its chair to make room. The monitor becomes that
-agent's Claude Code terminal:
+Click a Clawd, or its row on the board, and that agent's Claude Code terminal
+fills the window:
 
 - For sessions that Orca launched, it is the live terminal screen, read again
   every second, and you can type into its prompt box (see below).
-- For other sessions it is a screen pieced together from the session files: the
-  last prompts, tool calls, replies and errors. These can only be watched.
+- For other sessions it is a screen pieced together from the session's
+  transcript: its prompts, tool calls, replies and errors. These can only be
+  watched.
 
-Press Esc, click anywhere around the monitor, or use the Esc button under the
-screen to fly back out. An agent that has gone home has no desk, so its
-terminal opens as a window over the office instead.
+Scroll up, or press PageUp, to go back through the session; the earlier part
+comes from its transcript. The view stays where you put it while new output
+arrives, and typing brings it back to the bottom. Press Esc, or the Esc button
+in the bottom bar, to go back to the office.
 
 ## Where the data comes from
 
@@ -134,13 +135,13 @@ office. Orca puts each terminal's handle in the session's environment, so the
 office knows exactly which terminal a Clawd stands for and drives it through the
 `orca` CLI:
 
-- **Watch the screen.** The monitor shows what the terminal renders right now
-  (`orca terminal read --screen`).
-- **Type a prompt.** Typing on the monitor fills Claude Code's prompt box, and
+- **Watch the screen.** The terminal view shows what the terminal renders right
+  now (`orca terminal read --screen`).
+- **Type a prompt.** Typing fills Claude Code's prompt box, and
   Enter types your text into the terminal as a new prompt (`orca terminal
   send`). It is typed as is, on one line, so `/commands` and `!` shell mode
   behave as they do in the terminal. A busy agent queues it behind its current
-  step. Unsent text is kept per agent while you look at other screens.
+  step. Unsent text is kept per agent while you look at other terminals.
 - **Open in Orca.** Brings that terminal to the front (`orca terminal switch`).
 
 Messages are refused while an agent is showing a permission prompt or a
@@ -177,7 +178,7 @@ blender -b -P assets/build_assets.py -- --preview     # also render assets/previ
 server/     Bun server: session watcher, transcript parser, Orca bridge, hook endpoint, WebSocket
 shared/     Types shared by server and client
 src/scene/  three.js office: asset kit, Clawd animation, desks, room layout, camera
-src/ui/     React panels: staff board, the terminal drawn onto a monitor
+src/ui/     React panels: staff board, an agent's terminal
 assets/     Blender script that builds the model kit
 scripts/    Hook installer
 mac/        Menu bar app (Swift), the entry point it compiles the server from, and its build script

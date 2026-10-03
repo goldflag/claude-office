@@ -18,14 +18,12 @@ import {
   type Spot,
   WALK_Z,
 } from "./layout.ts";
-import { type ScreenFace, Station } from "./Station.ts";
+import { Station } from "./Station.ts";
 
 export type TimeMode = "auto" | "day" | "night";
 
 export interface OfficeCallbacks {
   onSelect(id: string | null): void;
-  /** The terminal element to pin onto the selected agent's monitor, when it is mounted. */
-  screen(): HTMLElement | null;
 }
 
 const WALL_H = 3;
@@ -36,17 +34,6 @@ const HURRY_SPEED = 3.4;
 const BOARD_INSET = 320;
 /** Share of the height the board takes from the bottom on narrow screens, matching the small-screen CSS. */
 const BOARD_SHARE_NARROW = 0.42;
-/** Share of the open view a monitor fills when the camera looks into it. */
-const SCREEN_FILL = 0.86;
-/** How far the camera looks down onto a monitor, in radians. */
-const SCREEN_TILT = 0.1;
-/** Seconds the camera takes to fly into a monitor and back out. */
-const FLY_IN = 1.3;
-const FLY_OUT = 0.9;
-/** Where a Clawd stands, beside its chair, while you look at its screen. */
-const ASIDE_X = SEAT_X + 0.62;
-const ASIDE_Z = SEAT_Z - 0.1;
-const ASIDE_HEADING = Math.atan2(SEAT_X - ASIDE_X, 0.2 - ASIDE_Z);
 
 const DAY = {
   background: new THREE.Color("#B4CDE9"),
@@ -135,8 +122,6 @@ class Actor {
   heading = 0;
   roamAt = 0;
   grow = 0;
-  /** 0 in the chair, 1 standing beside it to let you look at the screen. */
-  aside = 0;
   seenError: number | null;
   seenActivity: string;
 
@@ -162,10 +147,6 @@ class Actor {
     return new THREE.Vector3(this.cell.x + SEAT_X, SEAT_Y, this.cell.z + SEAT_Z);
   }
 
-  asidePosition() {
-    return new THREE.Vector3(this.cell.x + ASIDE_X, 0, this.cell.z + ASIDE_Z);
-  }
-
   /** The fixed route from this desk out to the shared walkway. */
   exitRoute(): THREE.Vector3[] {
     const aisle = this.cell.z + AISLE_Z;
@@ -179,22 +160,6 @@ class Actor {
 }
 
 const spotPosition = (s: Spot) => new THREE.Vector3(s.x, s.y, s.z);
-
-/** A camera placement: where it is and what it looks at. */
-interface Pose {
-  position: THREE.Vector3;
-  target: THREE.Vector3;
-}
-
-type ScreenStyle = Record<"width" | "height" | "transform" | "opacity", string>;
-
-/** A scripted camera move toward `key`: an agent's monitor, or back to the view it left. */
-interface Shot {
-  key: string;
-  from: Pose;
-  start: number;
-  duration: number;
-}
 
 function distanceToSegment(p: THREE.Vector3, a: THREE.Vector3, b: THREE.Vector3): number {
   const ab = new THREE.Vector3(b.x - a.x, 0, b.z - a.z);
@@ -241,15 +206,8 @@ export class OfficeScene {
   private lastSnapshot: OfficeSnapshot | null = null;
   /** Once the camera has been moved by hand, layout changes stop re-framing it. */
   private userMoved = false;
-  /** The view to return to, kept while the camera is looking into a monitor or flying back from one. */
-  private home: Pose | null = null;
-  private shot: Shot | null = null;
-  /** How far the current shot has got, 0 to 1. */
-  private shotProgress = 1;
-  /** The pinned terminal element and the styles last written to it. */
-  private screenEl: HTMLElement | null = null;
-  private screenStyle: ScreenStyle = { width: "", height: "", transform: "", opacity: "" };
-  private reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
+  /** While something covers the whole view, the office keeps living but is not drawn. */
+  private paused = false;
 
   private constructor(
     private readonly container: HTMLElement,
@@ -344,14 +302,13 @@ export class OfficeScene {
     const down = this.pointerDown;
     this.pointerDown = null;
     if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5 || e.button !== 0) return;
-    // Looking into a monitor, a click anywhere around it steps back out.
-    this.callbacks.onSelect(this.home ? null : this.pick(e));
+    this.callbacks.onSelect(this.pick(e));
   };
 
   private onPointerMove = (e: PointerEvent) => {
     if (this.pointerDown) return;
-    this.hovered = this.home ? null : this.pick(e);
-    this.renderer.domElement.style.cursor = this.home ? "zoom-out" : this.hovered ? "pointer" : "grab";
+    this.hovered = this.pick(e);
+    this.renderer.domElement.style.cursor = this.hovered ? "pointer" : "grab";
   };
 
   private onPointerLeave = () => {
@@ -364,19 +321,17 @@ export class OfficeScene {
     this.timeMode = mode;
   }
 
-  /**
-   * Selects an agent, and the camera flies into its monitor, where the
-   * terminal is pinned. Deselecting flies back to the view it came from.
-   */
   setSelected(id: string | null) {
     this.selected = id;
   }
 
+  setPaused(paused: boolean) {
+    this.paused = paused;
+  }
+
   resetView() {
     this.userMoved = false;
-    // On the way out of a monitor, head for the whole office instead of the view it came from.
-    if (this.home) this.home = this.overview();
-    else this.frameRoom(true);
+    this.frameRoom(true);
   }
 
   setSnapshot(snap: OfficeSnapshot) {
@@ -680,57 +635,33 @@ export class OfficeScene {
     this.fill.position.set(-0.2, 1, 0.5).multiplyScalar(40);
   }
 
-  /** Tangents of the half-angles of the part of the view the panels leave uncovered. */
-  private openView() {
-    const w = Math.max(1, this.container.clientWidth);
-    const h = Math.max(1, this.container.clientHeight);
-    const perPixel = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)) / ((h + this.insetBottom) / 2);
-    return {
-      tanV: (perPixel * Math.max(1, h - this.insetBottom)) / 2,
-      tanH: (perPixel * Math.max(0.3 * h, w - this.inset)) / 2,
-    };
-  }
-
-  /** The default view of the whole room. */
-  private overview(): Pose & { distance: number } {
+  private frameRoom(animate: boolean) {
     const { width: W, depth: D } = this.layout;
     const radius = Math.hypot(W, D) / 2;
-    const { tanV, tanH } = this.openView();
-    const fit = radius / Math.sin(Math.min(Math.atan(tanV), Math.atan(tanH)));
+    const w = Math.max(1, this.container.clientWidth);
+    const h = Math.max(1, this.container.clientHeight);
+    // Half-angles of the part of the view the panels leave uncovered.
+    const tanHalf = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)) / (h + this.insetBottom);
+    const halfV = Math.atan(tanHalf * (h - this.insetBottom));
+    const halfH = Math.atan(tanHalf * Math.max(0.3 * h, w - this.inset));
+    const fit = radius / Math.sin(Math.min(halfV, halfH));
     const distance = fit * 0.82;
     const target = new THREE.Vector3(0, 0.4, 0);
+    this.controls.minDistance = 4;
+    this.controls.maxDistance = fit * 1.6;
+    if (animate) {
+      this.focus = { target, distance };
+      return;
+    }
     const azimuth = 0.62;
     const elevation = 0.6;
-    const position = new THREE.Vector3(
+    this.controls.target.copy(target);
+    this.camera.position.set(
       Math.sin(azimuth) * Math.cos(elevation) * distance,
       Math.sin(elevation) * distance + target.y,
       Math.cos(azimuth) * Math.cos(elevation) * distance,
     );
-    return { position, target, distance };
-  }
-
-  private frameRoom(animate: boolean) {
-    const view = this.overview();
-    this.controls.minDistance = 4;
-    this.controls.maxDistance = (view.distance / 0.82) * 1.6;
-    if (animate) {
-      this.focus = { target: view.target, distance: view.distance };
-      return;
-    }
-    this.controls.target.copy(view.target);
-    this.camera.position.copy(view.position);
     this.framed = true;
-  }
-
-  /** Square in front of a monitor, close enough for its screen to fill the open view. */
-  private screenPose(face: ScreenFace): Pose {
-    const { tanV, tanH } = this.openView();
-    const distance = Math.max(face.height / 2 / (tanV * SCREEN_FILL), face.width / 2 / (tanH * SCREEN_FILL));
-    const position = face.center
-      .clone()
-      .addScaledVector(face.normal, distance * Math.cos(SCREEN_TILT))
-      .addScaledVector(face.up, distance * Math.sin(SCREEN_TILT));
-    return { position, target: face.center.clone() };
   }
 
   private resize() {
@@ -883,30 +814,23 @@ export class OfficeScene {
       }
     }
     if (actor.mode === "desk") {
-      // While you look at its screen, the Clawd hops off its chair and stands beside it.
-      actor.aside = damp(actor.aside, snap.id === this.selected ? 1 : 0, 5, dt);
-      pos.copy(actor.seatPosition()).lerp(actor.asidePosition(), actor.aside);
-      pos.y += Math.sin(actor.aside * Math.PI) * 0.18;
-      actor.heading = dampAngle(actor.heading, actor.aside > 0.5 ? ASIDE_HEADING : 0, 8, dt);
-    } else {
-      actor.aside = 0;
-    }
-    if (actor.mode === "spot" && actor.spot) {
+      pos.copy(actor.seatPosition());
+      actor.heading = dampAngle(actor.heading, 0, 8, dt);
+    } else if (actor.mode === "spot" && actor.spot) {
       actor.heading = dampAngle(actor.heading, actor.spot.facing, 8, dt);
     }
 
     actor.station.group.position.set(actor.cell.x, 0, actor.cell.z);
     clawd.root.rotation.y = actor.heading;
     clawd.walkSpeed = actor.mode === "walk" ? actor.speed : 0;
-    clawd.atDesk = actor.mode === "desk" && actor.aside < 0.5;
+    clawd.atDesk = actor.mode === "desk";
     clawd.activity = snap.activity;
     // A Clawd leaving shrinks away as it steps through the doorway.
     const vanishing = actor.mode === "walk" && actor.goal === "exit" && pos.x < DOOR_INSIDE_X - 0.25;
     actor.grow = damp(actor.grow, vanishing ? 0 : 1, vanishing ? 9 : 6, dt);
     clawd.root.scale.setScalar(Math.max(0.001, actor.grow));
     clawd.update(this.t, dt);
-    const inspected = snap.id === this.selected && this.home !== null;
-    actor.station.update(this.t, dt, snap, this.night, actor.mode === "desk" && actor.aside < 0.5, inspected);
+    actor.station.update(this.t, dt, snap, this.night, actor.mode === "desk");
   }
 
   // ------------------------------------------------------------------ frame
@@ -940,20 +864,6 @@ export class OfficeScene {
     this.doorOpen = damp(this.doorOpen, atDoor ? 1 : 0, 7, dt);
     if (this.doorPanel) this.doorPanel.rotation.y = -this.doorOpen * 1.4;
 
-    const chosen = this.selected ? this.actors.get(this.selected) : undefined;
-    const face = chosen?.station.screenFace() ?? null;
-    if (face || this.home) this.flyShot(chosen?.snap.id ?? "home", face);
-    else this.steer(dt);
-    this.camera.updateMatrixWorld();
-
-    this.labels.dataset.hidden = this.home ? "1" : "0";
-    this.placeTags();
-    this.placeScreen(face);
-    this.renderer.render(this.scene, this.camera);
-  };
-
-  /** Hands-on camera: orbit controls, plus the glide used to reframe the room. */
-  private steer(dt: number) {
     if (this.focus) {
       const { target, distance } = this.focus;
       const offset = this.camera.position.clone().sub(this.controls.target);
@@ -976,88 +886,11 @@ export class OfficeScene {
     this.camera.position.add(clamped.clone().sub(target));
     target.copy(clamped);
     this.controls.update();
-  }
 
-  /** Scripted camera: into the selected agent's monitor, or back out to the view it left. */
-  private flyShot(key: string, face: ScreenFace | null) {
-    const here = { position: this.camera.position.clone(), target: this.controls.target.clone() };
-    if (!this.home) this.home = here;
-    if (this.shot?.key !== key) {
-      const duration = this.reduceMotion.matches ? 0 : key === "home" ? FLY_OUT : FLY_IN;
-      this.shot = { key, from: here, start: this.t, duration };
-      this.controls.enabled = false;
-      this.focus = null;
-    }
-    const shot = this.shot;
-    const goal = face ? this.screenPose(face) : this.home;
-    this.shotProgress = shot.duration > 0 ? Math.min(1, (this.t - shot.start) / shot.duration) : 1;
-    const pose = this.shotProgress < 1 ? swing(shot.from, goal, this.shotProgress) : goal;
-    this.camera.position.copy(pose.position);
-    this.controls.target.copy(pose.target);
-    this.camera.lookAt(pose.target);
-    if (!face && this.shotProgress >= 1) {
-      this.home = null;
-      this.shot = null;
-      this.controls.enabled = true;
-    }
-  }
-
-  /**
-   * Pins the terminal element onto the monitor's screen with a perspective
-   * transform, fading it in as the camera arrives. An agent without a desk
-   * gets the terminal floating in the middle of the view instead.
-   */
-  private placeScreen(face: ScreenFace | null) {
-    const el = this.callbacks.screen();
-    if (!el) return;
-    if (el !== this.screenEl) {
-      this.screenEl = el;
-      this.screenStyle = { width: "", height: "", transform: "", opacity: "" };
-    }
-    const w = this.container.clientWidth;
-    const h = this.container.clientHeight;
-    let corners: [number, number][];
-    let opacity: number;
-    if (face) {
-      const arriving = this.shot?.key === this.selected ? this.shotProgress : 0;
-      opacity = THREE.MathUtils.smoothstep(arriving, 0.72, 1);
-      corners = face.corners.map((c) => {
-        const v = c.clone().project(this.camera);
-        return [(v.x * 0.5 + 0.5) * w, (-v.y * 0.5 + 0.5) * h];
-      });
-    } else {
-      opacity = 1;
-      const openW = w - this.inset;
-      const openH = h - this.insetBottom;
-      const sw = Math.min(openW - 48, (openH - 48) * 1.6, 1100);
-      const sh = sw / 1.6;
-      const x = this.inset + (openW - sw) / 2;
-      const y = (openH - sh) / 2;
-      corners = [
-        [x, y],
-        [x + sw, y],
-        [x + sw, y + sh],
-        [x, y + sh],
-      ];
-    }
-    const style: ScreenStyle = { width: "", height: "", transform: "", opacity: opacity.toFixed(3) };
-    if (opacity > 0) {
-      const [tl, tr, br, bl] = corners as [[number, number], [number, number], [number, number], [number, number]];
-      // Lay the element out at about the size it appears, so its text is drawn crisp rather than scaled.
-      const sw = Math.max(1, Math.round((Math.hypot(tr[0] - tl[0], tr[1] - tl[1]) + Math.hypot(br[0] - bl[0], br[1] - bl[1])) / 2));
-      const sh = Math.max(1, Math.round((Math.hypot(bl[0] - tl[0], bl[1] - tl[1]) + Math.hypot(br[0] - tr[0], br[1] - tr[1])) / 2));
-      style.width = `${sw}px`;
-      style.height = `${sh}px`;
-      style.transform = rectToQuad(sw, sh, corners);
-    }
-    for (const key of ["width", "height", "transform", "opacity"] as const) {
-      if (style[key] && style[key] !== this.screenStyle[key]) el.style[key] = style[key];
-      else style[key] = this.screenStyle[key];
-    }
-    this.screenStyle = style;
-    el.dataset.ready = opacity > 0.95 ? "1" : "0";
-    el.dataset.floating = face ? "0" : "1";
-  }
+    if (this.paused) return;
+    this.placeTags();
+    this.renderer.render(this.scene, this.camera);
+  };
 
   private placeTags() {
     const w = this.container.clientWidth;
@@ -1092,51 +925,6 @@ function nearestLeg(point: THREE.Vector3, route: THREE.Vector3[]): number {
     }
   }
   return best;
-}
-
-const easeInOut = (u: number) => (u < 0.5 ? 4 * u * u * u : 1 - (-2 * u + 2) ** 3 / 2);
-
-/**
- * A camera pose part way between two others. It orbits around the target
- * rather than cutting straight across, and rises over the desks when it has
- * to swing far around, so it never flies through the furniture.
- */
-function swing(from: Pose, to: Pose, u: number): Pose {
-  const e = easeInOut(u);
-  const turnE = easeInOut(Math.min(1, u * 1.3));
-  const target = from.target.clone().lerp(to.target, e);
-  const a = new THREE.Spherical().setFromVector3(from.position.clone().sub(from.target));
-  const b = new THREE.Spherical().setFromVector3(to.position.clone().sub(to.target));
-  const turn = Math.atan2(Math.sin(b.theta - a.theta), Math.cos(b.theta - a.theta));
-  const rise = ((0.55 * Math.abs(turn)) / Math.PI) * Math.sin(Math.PI * turnE);
-  const radius = Math.exp(THREE.MathUtils.lerp(Math.log(a.radius), Math.log(b.radius), e));
-  const phi = Math.max(0.12, THREE.MathUtils.lerp(a.phi, b.phi, turnE) - rise);
-  const offset = new THREE.Vector3().setFromSpherical(new THREE.Spherical(radius, phi, a.theta + turn * turnE));
-  return { position: offset.add(target), target };
-}
-
-/**
- * A CSS matrix3d that maps a w by h box onto four points, given clockwise
- * from top left: the projective map from the unit square to a quad, scaled to
- * the box.
- */
-function rectToQuad(w: number, h: number, quad: [number, number][]): string {
-  const [[x0, y0], [x1, y1], [x2, y2], [x3, y3]] = quad as [[number, number], [number, number], [number, number], [number, number]];
-  const dx1 = x1 - x2;
-  const dx2 = x3 - x2;
-  const dx3 = x0 - x1 + x2 - x3;
-  const dy1 = y1 - y2;
-  const dy2 = y3 - y2;
-  const dy3 = y0 - y1 + y2 - y3;
-  const det = dx1 * dy2 - dx2 * dy1 || 1e-9;
-  const g = (dx3 * dy2 - dx2 * dy3) / det;
-  const k = (dx1 * dy3 - dx3 * dy1) / det;
-  const a = x1 - x0 + g * x1;
-  const b = x3 - x0 + k * x3;
-  const d = y1 - y0 + g * y1;
-  const e = y3 - y0 + k * y3;
-  const m = [a / w, d / w, 0, g / w, b / h, e / h, 0, k / h, 0, 0, 1, 0, x0, y0, 0, 1];
-  return `matrix3d(${m.map((n) => +n.toFixed(8)).join(",")})`;
 }
 
 function dampAngle(current: number, target: number, lambda: number, dt: number): number {

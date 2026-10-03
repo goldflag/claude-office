@@ -11,24 +11,6 @@ const MAX_MINIS = 4;
 const MONITOR_X = SEAT_X;
 const MONITOR_Z = 0.2;
 const MONITOR_FACING = Math.atan2(SEAT_X - MONITOR_X, SEAT_Z - MONITOR_Z);
-/**
- * Renders as the terminal's #1f1e1d background once the scene's neutral tone
- * mapping has darkened it, so the screen fades into the terminal without a seam.
- */
-const TERMINAL_BG = "#3c3c3b";
-
-/** A monitor's screen in world space, as seen from the seat. */
-export interface ScreenFace {
-  /** Top left, top right, bottom right, bottom left. */
-  corners: THREE.Vector3[];
-  center: THREE.Vector3;
-  /** Points out of the screen toward the seat. */
-  normal: THREE.Vector3;
-  /** The screen's own up direction. */
-  up: THREE.Vector3;
-  width: number;
-  height: number;
-}
 
 interface Mini {
   group: THREE.Group;
@@ -61,9 +43,6 @@ export class Station {
   private puffs: Puff[] = [];
   private puffMaterial = new THREE.MeshBasicMaterial({ color: "#8B8F99", transparent: true, opacity: 0.8 });
   private monitorTop = new THREE.Vector3(MONITOR_X, DESK_TOP + 0.5, MONITOR_Z);
-  private panel: THREE.Mesh;
-  /** The screen's corners in the panel's own space. */
-  private panelCorners: THREE.Vector3[];
 
   constructor(
     private readonly kit: Kit,
@@ -83,25 +62,8 @@ export class Station {
     // The screen points at the seat, so the usual camera angle sees its back.
     const monitor = add(kit.make("Monitor"), MONITOR_X, DESK_TOP, MONITOR_Z, MONITOR_FACING);
     monitor.scale.setScalar(0.88);
-    this.panel = part(monitor, "Monitor_Screen");
-    this.panel.material = this.screen.material;
-    const geometry = this.panel.geometry;
-    if (!geometry.boundingBox) geometry.computeBoundingBox();
-    const { min, max } = geometry.boundingBox!;
-    // The panel is flat, so its thinnest extent is the way it faces.
-    const [thin, a, b] = [0, 1, 2].sort((i, j) => max.getComponent(i) - min.getComponent(i) - (max.getComponent(j) - min.getComponent(j)));
-    this.panelCorners = [
-      [0, 0],
-      [1, 0],
-      [1, 1],
-      [0, 1],
-    ].map(([ua, ub]) => {
-      const c = new THREE.Vector3();
-      c.setComponent(thin!, (min.getComponent(thin!) + max.getComponent(thin!)) / 2);
-      c.setComponent(a!, ua ? max.getComponent(a!) : min.getComponent(a!));
-      c.setComponent(b!, ub ? max.getComponent(b!) : min.getComponent(b!));
-      return c;
-    });
+    const panel = part(monitor, "Monitor_Screen");
+    panel.material = this.screen.material;
 
     add(kit.make("Keyboard"), SEAT_X, DESK_TOP, -0.17);
     add(kit.make("Mug"), 0.52, DESK_TOP, -0.14, hash01(agentId, 1) * 6);
@@ -120,35 +82,6 @@ export class Station {
     this.ring.rotation.x = -Math.PI / 2;
     this.ring.position.set(SEAT_X, 0.015, SEAT_Z);
     this.group.add(this.ring);
-  }
-
-  screenFace(): ScreenFace {
-    this.panel.updateWorldMatrix(true, false);
-    const world = this.panelCorners.map((c) => c.clone().applyMatrix4(this.panel.matrixWorld));
-    const center = world.reduce((sum, p) => sum.add(p), new THREE.Vector3()).multiplyScalar(0.25);
-    const normal = new THREE.Vector3()
-      .subVectors(world[1]!, world[0]!)
-      .cross(new THREE.Vector3().subVectors(world[3]!, world[0]!))
-      .normalize();
-    if (normal.dot(this.group.localToWorld(this.seat.clone()).sub(center)) < 0) normal.negate();
-    const up = new THREE.Vector3(0, 1, 0).projectOnPlane(normal).normalize();
-    const right = new THREE.Vector3().crossVectors(up, normal);
-    // Name the corners by where they sit for someone in the seat.
-    const along = world.map((p) => {
-      const d = p.clone().sub(center);
-      return { p, x: d.dot(right), y: d.dot(up) };
-    });
-    const pick = (score: (c: { x: number; y: number }) => number) =>
-      along.reduce((best, c) => (score(c) > score(best) ? c : best)).p;
-    const corners = [pick((c) => c.y - c.x), pick((c) => c.x + c.y), pick((c) => c.x - c.y), pick((c) => -c.x - c.y)];
-    return {
-      corners,
-      center,
-      normal,
-      up,
-      width: corners[0]!.distanceTo(corners[1]!),
-      height: corners[0]!.distanceTo(corners[3]!),
-    };
   }
 
   /** A burst of smoke from the monitor, for a failed tool call. */
@@ -190,12 +123,10 @@ export class Station {
     });
   }
 
-  /** With `inspected`, someone is looking into this monitor and the terminal is drawn over it. */
-  update(t: number, dt: number, agent: AgentSnapshot, night: number, seated: boolean, inspected: boolean) {
+  update(t: number, dt: number, agent: AgentSnapshot, night: number, seated: boolean) {
     // An empty chair shows a dark screen unless work is going on.
     const working = agent.activity !== "idle" && agent.activity !== "sleeping" && agent.activity !== "done";
-    if (inspected) this.screen.blank(TERMINAL_BG);
-    else this.screen.draw(seated || working ? agent.activity : "sleeping", t);
+    this.screen.draw(seated || working ? agent.activity : "sleeping", t);
 
     const fill = Math.min(1, agent.contextTokens / 1_000_000) ** 0.6;
     this.paperHeight = damp(this.paperHeight, 0.004 + fill * 0.24, 3, dt);
