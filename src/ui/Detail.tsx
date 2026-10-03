@@ -1,23 +1,27 @@
 import type { AgentSnapshot } from "../../shared/types.ts";
 import { ago, describeAgent, describeWork, groupOf, tokens } from "../describe.ts";
+import { Composer } from "./Composer.tsx";
+import { TerminalPeek } from "./TerminalPeek.tsx";
 import { useNow } from "./useNow.ts";
 
 interface Props {
   agent: AgentSnapshot;
   color: string;
+  canSend: boolean;
   onClose(): void;
 }
 
 const shortPath = (cwd: string) => cwd.replace(/^\/Users\/[^/]+/, "~");
 
 /** Everything known about one agent: what it was asked, what it is doing, what it did. */
-export function Detail({ agent, color, onClose }: Props) {
+export function Detail({ agent, color, canSend, onClose }: Props) {
   const now = useNow(1000);
   const group = groupOf(agent.activity);
   const recent = agent.recent.slice().reverse();
 
   return (
     <aside className="detail" data-group={group} aria-label={`Details for ${agent.name}`}>
+      <div className="detail-scroll">
       <header className="detail-head">
         <div>
           <h2 className="detail-name">{agent.name}</h2>
@@ -48,6 +52,14 @@ export function Detail({ agent, color, onClose }: Props) {
       </p>
 
       {agent.title && <p className="detail-title">{agent.title}</p>}
+
+      {agent.orca && (agent.orca.worktreeName || agent.orca.comment) && (
+        <p className="orca-card">
+          <span className="orca-name">{agent.orca.worktreeName ?? "Orca worktree"}</span>
+          {agent.orca.status && <span className="orca-status">{agent.orca.status.replace(/-/g, " ")}</span>}
+          {agent.orca.comment && <span className="orca-comment">{agent.orca.comment}</span>}
+        </p>
+      )}
 
       {agent.lastPrompt && (
         <section>
@@ -86,6 +98,8 @@ export function Detail({ agent, color, onClose }: Props) {
         </section>
       )}
 
+      {agent.orca && <TerminalPeek agentId={agent.id} />}
+
       <dl className="facts">
         <div>
           <dt>Context</dt>
@@ -101,11 +115,19 @@ export function Detail({ agent, color, onClose }: Props) {
             <dd>{agent.model.replace(/^claude-/, "")}</dd>
           </div>
         )}
+        {agent.app && (
+          <div>
+            <dt>Running in</dt>
+            <dd>{agent.app}</dd>
+          </div>
+        )}
         <div>
           <dt>Folder</dt>
           <dd title={agent.cwd}>{shortPath(agent.cwd)}</dd>
         </div>
       </dl>
+      </div>
+      <Composer agent={agent} canSend={canSend} />
     </aside>
   );
 }

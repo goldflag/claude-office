@@ -45,6 +45,12 @@ function agent(
     startedAt: started - (i + 1) * 900_000,
     lastActivityAt: now,
     idleSince: null,
+    // In the demo, sessions in two of the projects run in Orca and the rest in Cursor.
+    app: project === "storefront" || project === "api-server" ? "Orca" : "Cursor",
+    orca:
+      project === "storefront" || project === "api-server"
+        ? { writable: true, worktreeName: `${name} worktree`, status: "in-progress", comment: null }
+        : null,
     recent: [
       { at: now - 95_000, kind: "prompt", label: "you", detail: "Make the checkout flow retry failed payments safely." },
       { at: now - 80_000, kind: "tool", label: "Read", detail: "checkout.ts" },
@@ -108,5 +114,5 @@ export function demoSnapshot(): OfficeSnapshot {
     agent(12, "moss", "mobile-app", "thinking"),
   ];
 
-  return { at: now, hooksInstalled: true, agents };
+  return { at: now, hooksInstalled: true, canSend: true, agents };
 }

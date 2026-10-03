@@ -64,8 +64,10 @@ export function App() {
 
       {selectedAgent && (
         <Detail
+          key={selectedAgent.id}
           agent={selectedAgent}
           color={projectColors.get(selectedAgent.project) ?? "#CCCCCC"}
+          canSend={snapshot?.canSend ?? false}
           onClose={() => select(null, false)}
         />
       )}

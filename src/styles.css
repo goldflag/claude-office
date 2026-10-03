@@ -193,11 +193,15 @@ code {
   position: absolute;
   top: 16px;
   max-height: calc(100% - 32px);
-  overflow-y: auto;
   background: var(--board);
   backdrop-filter: blur(14px);
   border-radius: 20px;
   box-shadow: var(--lift);
+}
+
+.board,
+.detail-scroll {
+  overflow-y: auto;
   scrollbar-width: thin;
 }
 
@@ -423,9 +427,18 @@ code {
 
 /* ----------------------------------------------------------------- detail */
 
+/* The details scroll; the message box stays put underneath them. */
 .detail {
   right: 16px;
   width: 348px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.detail-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
   padding: 18px 18px 16px;
 }
 
@@ -610,6 +623,159 @@ code {
   overflow-wrap: anywhere;
 }
 
+.orca-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin: 8px 0 0;
+  color: var(--ink-2);
+}
+
+.orca-name {
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.orca-status {
+  padding: 0 7px 1px;
+  border-radius: 7px;
+  background: var(--wash);
+  font-size: 12px;
+}
+
+.orca-comment {
+  flex-basis: 100%;
+}
+
+.disclosure {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0;
+  background: none;
+  border: 0;
+  font: 500 12px/1.2 var(--display);
+  color: var(--ink-3);
+}
+
+.disclosure:hover {
+  color: var(--ink);
+}
+
+.disclosure[aria-expanded="true"] .group-chevron {
+  transform: rotate(225deg) translate(-2px, -2px);
+}
+
+.terminal {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #1c2230;
+  color: #d5dbe6;
+  font: 400 10.5px/1.5 ui-monospace, "SF Mono", Menlo, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.composer {
+  flex: none;
+  margin: 0;
+  padding: 12px 14px 14px;
+  border-top: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.composer textarea {
+  display: block;
+  width: 100%;
+  resize: none;
+  padding: 9px 11px;
+  border: 1px solid rgba(31, 42, 58, 0.18);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+}
+
+.composer textarea::placeholder {
+  color: var(--ink-3);
+}
+
+.composer textarea:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+
+.composer-note {
+  margin: 0;
+  color: var(--ink-2);
+}
+
+.composer-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.composer-status {
+  flex: 1;
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+
+.composer-status[data-kind="sent"] {
+  color: #1c6b44;
+}
+
+.composer-status[data-kind="error"] {
+  color: #b23a26;
+}
+
+.send,
+.quiet-button {
+  flex: none;
+  border: 0;
+  border-radius: 11px;
+  padding: 7px 14px;
+  font: 500 12.5px/1.2 var(--display);
+}
+
+.send {
+  background: var(--ink);
+  color: #fff;
+}
+
+.send:disabled {
+  background: rgba(31, 42, 58, 0.25);
+  cursor: default;
+}
+
+.quiet-button {
+  background: var(--wash);
+  color: var(--ink-2);
+}
+
+.quiet-button:hover {
+  background: rgba(31, 42, 58, 0.12);
+  color: var(--ink);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* --------------------------------------------------------------- controls */
 
 .view-controls {
@@ -618,6 +784,11 @@ code {
   bottom: 16px;
   display: flex;
   gap: 8px;
+}
+
+/* With the details open, the controls step aside instead of covering the message box. */
+.app:has(.detail) .view-controls {
+  right: 380px;
 }
 
 .segmented,
@@ -659,9 +830,8 @@ code {
 
 .hint {
   position: absolute;
-  left: 50%;
+  left: 352px;
   bottom: 20px;
-  transform: translateX(-50%);
   margin: 0;
   padding: 6px 14px;
   border-radius: 12px;
@@ -718,7 +888,8 @@ code {
     max-height: calc(58% - 72px);
   }
 
-  .view-controls {
+  .view-controls,
+  .app:has(.detail) .view-controls {
     top: 12px;
     right: 12px;
     bottom: auto;

@@ -6,12 +6,19 @@ import type {
   AgentSnapshot,
   NeedsYou,
   OfficeSnapshot,
+  OrcaLink,
+  SendResult,
   SubagentSnapshot,
+  TerminalView,
   ToolCall,
 } from "../shared/types.ts";
+import { inspectProcess, Orca, OrcaError, type ProcessHost } from "./orca.ts";
 import { TranscriptTail, type TranscriptState } from "./transcript.ts";
 
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude");
+/** Set OFFICE_READ_ONLY=1 to run the office as a pure viewer. */
+const READ_ONLY = process.env.OFFICE_READ_ONLY === "1";
+const MAX_MESSAGE_LENGTH = 4000;
 const SESSIONS_DIR = join(CLAUDE_DIR, "sessions");
 const PROJECTS_DIR = join(CLAUDE_DIR, "projects");
 
@@ -53,6 +60,7 @@ interface Subagent {
 interface Agent {
   file: SessionFile;
   git: GitInfo;
+  host: ProcessHost;
   tail: TranscriptTail | null;
   tailSessionId: string | null;
   subagents: Map<string, Subagent>;
@@ -193,7 +201,8 @@ export class Office {
   private lastJson = "";
   private listeners = new Set<(snap: OfficeSnapshot) => void>();
   private tick = 0;
-  current: OfficeSnapshot = { at: Date.now(), hooksInstalled: false, agents: [] };
+  private orca = new Orca();
+  current: OfficeSnapshot = { at: Date.now(), hooksInstalled: false, canSend: !READ_ONLY, agents: [] };
 
   start() {
     const loop = async () => {
@@ -277,6 +286,7 @@ export class Office {
           agent = {
             file,
             git: await gitInfo(file.cwd),
+            host: await inspectProcess(file.pid),
             tail: null,
             tailSessionId: null,
             subagents: new Map(),
@@ -305,6 +315,7 @@ export class Office {
     );
 
     for (const pid of this.agents.keys()) if (!seen.has(pid)) this.agents.delete(pid);
+    if ([...this.agents.values()].some((a) => a.host.handle)) await this.orca.refresh(Date.now());
 
     const now = Date.now();
     const needsPs = [...this.agents.values()].some(
@@ -320,7 +331,7 @@ export class Office {
     const json = JSON.stringify([this.hooksInstalled, agents]);
     if (json === this.lastJson) return;
     this.lastJson = json;
-    this.current = { at: now, hooksInstalled: this.hooksInstalled, agents };
+    this.current = { at: now, hooksInstalled: this.hooksInstalled, canSend: !READ_ONLY, agents };
     for (const fn of this.listeners) fn(this.current);
   }
 
@@ -447,6 +458,58 @@ export class Office {
       idleSince,
       recent: state?.recent.slice(-25) ?? [],
       subagents,
+      app: agent.host.app,
+      orca: this.orcaLink(agent),
     };
+  }
+
+  private orcaLink(agent: Agent): OrcaLink | null {
+    const terminal = this.orca.terminalFor(agent.host);
+    if (!terminal) return null;
+    const worktree = this.orca.worktreeFor(agent.host);
+    return {
+      writable: terminal.writable,
+      worktreeName: worktree?.name ?? null,
+      status: worktree?.status ?? null,
+      comment: worktree?.comment ?? null,
+    };
+  }
+
+  private terminalOf(id: string) {
+    const agent = this.agents.get(Number(id));
+    if (!agent) throw new OrcaError("That session is no longer running.", "gone");
+    const terminal = this.orca.terminalFor(agent.host);
+    if (!terminal) {
+      const where = agent.host.app && agent.host.app !== "Orca" ? ` It is running in ${agent.host.app}.` : "";
+      throw new OrcaError(`This session is not in an Orca terminal, so the office can only watch it.${where}`, "not_orca");
+    }
+    return terminal;
+  }
+
+  /** The last lines on the agent's terminal screen. */
+  async readTerminal(id: string): Promise<TerminalView> {
+    return { lines: await this.orca.read(this.terminalOf(id).handle) };
+  }
+
+  /** Brings the agent's terminal to the front in Orca. */
+  async focus(id: string) {
+    await this.orca.focus(this.terminalOf(id).handle);
+  }
+
+  /** Types a message into the agent's terminal as a new prompt. */
+  async message(id: string, text: string): Promise<SendResult> {
+    if (READ_ONLY) throw new OrcaError("This office was started read-only.", "read_only");
+    const terminal = this.terminalOf(id);
+    if (!terminal.writable) throw new OrcaError("Orca reports this terminal is not accepting input.", "not_writable");
+    if (this.current.agents.find((a) => a.id === id)?.needsYou) {
+      throw new OrcaError("This agent is showing a prompt. Answer it in Orca first.", "dialog_open");
+    }
+    // A newline typed into a terminal submits, so a message is always one line.
+    const clean = text.replace(/\s*[\r\n]+\s*/g, " ").trim();
+    if (!clean) throw new OrcaError("The message is empty.", "empty");
+    if (clean.length > MAX_MESSAGE_LENGTH) {
+      throw new OrcaError(`Messages are limited to ${MAX_MESSAGE_LENGTH} characters.`, "too_long");
+    }
+    return this.orca.send(terminal.handle, clean);
   }
 }

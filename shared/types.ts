@@ -51,6 +51,16 @@ export interface SubagentSnapshot {
   updatedAt: number;
 }
 
+/** The agent's terminal in Orca, present when Orca launched the session. */
+export interface OrcaLink {
+  /** False when Orca reports the terminal as disconnected or not accepting input. */
+  writable: boolean;
+  worktreeName: string | null;
+  /** Orca's card status for the worktree, such as in-progress or in-review. */
+  status: string | null;
+  comment: string | null;
+}
+
 export interface AgentSnapshot {
   /** Stable per process, so a desk survives /clear and resume. */
   id: string;
@@ -77,12 +87,26 @@ export interface AgentSnapshot {
   idleSince: number | null;
   recent: ActionEntry[];
   subagents: SubagentSnapshot[];
+  /** The app whose terminal hosts the session, such as Orca or Cursor. */
+  app: string | null;
+  orca: OrcaLink | null;
 }
 
 export interface OfficeSnapshot {
   at: number;
   hooksInstalled: boolean;
+  /** False when the server was started read-only and will not send anything to agents. */
+  canSend: boolean;
   agents: AgentSnapshot[];
+}
+
+export interface TerminalView {
+  lines: string[];
+}
+
+export interface SendResult {
+  /** True once the agent's turn was seen to start; false means the message is queued. */
+  started: boolean;
 }
 
 export type ServerMessage = { type: "snapshot"; data: OfficeSnapshot };

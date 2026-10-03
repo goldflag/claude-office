@@ -50,7 +50,7 @@ Clawd for the last prompt, the current tool, subagents and recent activity.
 
 ## Where the data comes from
 
-The server only reads files; it never writes to a session or sends it input.
+Watching is done entirely by reading files:
 
 - `~/.claude/sessions/<pid>.json` gives the live sessions, their names and
   whether each is busy or idle.
@@ -78,10 +78,37 @@ Each hook is one `curl` to `127.0.0.1` that fails silently when the office is
 not running. Your settings file is backed up before either command changes it.
 Sessions started before installing need a restart to pick the hooks up.
 
-## Privacy
+## Talking to agents (Orca)
+
+Sessions that Orca launched can be messaged from the
+office. Orca puts each terminal's handle in the session's environment, so the
+office knows exactly which terminal a Clawd stands for and drives it through the
+`orca` CLI:
+
+- **Send a message.** The box at the bottom of an agent's details types your
+  text into its terminal as a new prompt (`orca terminal send`). It is typed as
+  is, on one line, so `/commands` and `!` shell mode behave as they do in the
+  terminal. A busy agent queues it behind its current step.
+- **Open in Orca.** Brings that terminal to the front (`orca terminal switch`).
+- **Terminal.** Shows the live tail of the agent's terminal screen.
+- The details also show the Orca worktree name, card status and comment.
+
+Messages are refused while an agent is showing a permission prompt or a
+question, because Enter there would accept the highlighted option. The office
+checks both its own state and the terminal screen before typing, and points you
+to Orca to answer instead.
+
+Sessions running elsewhere (Cursor, Terminal, and so on) stay watch-only; the
+details say where each one is running. Start the server with
+`OFFICE_READ_ONLY=1` to turn sending off altogether.
+
+## Privacy and safety
 
 The server binds to `127.0.0.1` and rejects requests from other origins, since
-snapshots contain snippets of your prompts and commands.
+snapshots contain snippets of your prompts and commands. Anything that reaches
+an agent also requires a header that other websites cannot send. Sending a
+message is as powerful as typing in that agent's terminal, so do not expose
+this server to a network without adding authentication first.
 
 ## Assets
 
@@ -97,7 +124,7 @@ blender -b -P assets/build_assets.py -- --preview     # also render assets/previ
 ## Layout
 
 ```
-server/     Bun server: session watcher, transcript parser, hook endpoint, WebSocket
+server/     Bun server: session watcher, transcript parser, Orca bridge, hook endpoint, WebSocket
 shared/     Types shared by server and client
 src/scene/  three.js office: asset kit, Clawd animation, desks, room layout, camera
 src/ui/     React panels: staff board, agent details

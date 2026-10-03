@@ -3,6 +3,7 @@ import type { ServerWebSocket } from "bun";
 import index from "../src/index.html";
 import { DEFAULT_PORT, type OfficeSnapshot, type ServerMessage } from "../shared/types.ts";
 import { Office } from "./office.ts";
+import { OrcaError } from "./orca.ts";
 
 const PORT = Number(process.env.PORT ?? DEFAULT_PORT);
 const PUBLIC_DIR = join(import.meta.dir, "..", "public");
@@ -28,6 +29,26 @@ function isLocal(req: Request): boolean {
 
 const forbidden = () => new Response("forbidden", { status: 403 });
 
+/**
+ * Actions that reach an agent need a custom header on top of the origin check.
+ * A browser will not let another site send it without a preflight this server
+ * never answers, so a page you happen to visit cannot type into your agents.
+ */
+const mayAct = (req: Request) => isLocal(req) && req.headers.get("x-claude-office") === "1";
+
+async function act<T>(run: () => Promise<T>): Promise<Response> {
+  try {
+    return Response.json({ ok: true, result: (await run()) ?? null });
+  } catch (err) {
+    const known = err instanceof OrcaError;
+    if (!known) console.error("[office] action failed", err);
+    return Response.json(
+      { ok: false, error: known ? err.message : "Something went wrong talking to Orca.", code: known ? err.code : null },
+      { status: known ? 409 : 500 },
+    );
+  }
+}
+
 const server = Bun.serve({
   hostname: "127.0.0.1",
   port: PORT,
@@ -44,6 +65,17 @@ const server = Bun.serve({
           // A malformed hook payload must never fail the hook that sent it.
         }
         return new Response(null, { status: 204 });
+      },
+    },
+    "/api/agents/:id/terminal": (req) => (isLocal(req) ? act(() => office.readTerminal(req.params.id)) : forbidden()),
+    "/api/agents/:id/focus": {
+      POST: (req) => (mayAct(req) ? act(() => office.focus(req.params.id)) : forbidden()),
+    },
+    "/api/agents/:id/message": {
+      POST: async (req) => {
+        if (!mayAct(req)) return forbidden();
+        const body = (await req.json().catch(() => null)) as { text?: unknown } | null;
+        return act(() => office.message(req.params.id, typeof body?.text === "string" ? body.text : ""));
       },
     },
     "/ws": (req, server) => {

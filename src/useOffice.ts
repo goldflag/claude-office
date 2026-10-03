@@ -1,13 +1,12 @@
 import { useEffect, useState } from "react";
 import type { OfficeSnapshot, ServerMessage } from "../shared/types.ts";
+import { isDemo } from "./api.ts";
 import { demoSnapshot } from "./demo.ts";
 
 export interface OfficeFeed {
   snapshot: OfficeSnapshot | null;
   connected: boolean;
 }
-
-const isDemo = new URLSearchParams(location.search).has("demo");
 
 /** Live office state from the local server, reconnecting when the socket drops. */
 export function useOffice(): OfficeFeed {
