@@ -267,12 +267,26 @@ code {
 
 /* ------------------------------------------------------------------ board */
 
-.board {
+/* The left edge: the board at the top and the usage card pinned to the bottom. */
+.rail {
   position: absolute;
   top: 16px;
+  bottom: 16px;
   left: 16px;
   width: 304px;
-  max-height: calc(100% - 32px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.rail > * {
+  pointer-events: auto;
+}
+
+.board {
+  flex: 0 1 auto;
+  min-height: 0;
   padding: 16px 10px 12px;
   overflow-y: auto;
   scrollbar-width: thin;
@@ -686,6 +700,84 @@ code {
   outline-color: var(--term-fg);
 }
 
+/* ------------------------------------------------------------------ usage */
+
+.usage {
+  flex: none;
+  margin-top: auto;
+  padding: 12px 16px 12px;
+  background: var(--board);
+  backdrop-filter: blur(14px);
+  border-radius: 16px;
+  box-shadow: var(--lift);
+}
+
+.usage-title {
+  margin: 0 0 8px;
+  font: 500 12px/1 var(--display);
+  color: var(--ink-3);
+}
+
+.meter + .meter {
+  margin-top: 8px;
+}
+
+.meter-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.meter-label {
+  font: 600 12.5px/1.2 var(--display);
+}
+
+.meter-value {
+  font: 600 12.5px/1.2 var(--display);
+  font-variant-numeric: tabular-nums;
+}
+
+.meter-reset {
+  margin-left: auto;
+  color: var(--ink-3);
+  font-size: 11.5px;
+}
+
+.meter-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--wash);
+  overflow: hidden;
+}
+
+.meter-fill {
+  --fill: var(--working);
+  height: 100%;
+  border-radius: 3px;
+  background: var(--fill);
+}
+
+.meter[data-level="warn"] .meter-fill {
+  --fill: var(--needs);
+}
+
+.meter[data-level="high"] .meter-fill {
+  --fill: #d9573f;
+}
+
+.usage-tokens {
+  margin: 8px 0 0;
+  color: var(--ink-2);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-tokens b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
 /* --------------------------------------------------------------- controls */
 
 .view-controls {
@@ -773,21 +865,31 @@ code {
   background: rgba(255, 255, 255, 0.16);
 }
 
-/* The menu bar app has no board, so the hint moves to the edge it left. */
+/* The menu bar app has no board, so the hint moves to the edge it left. The usage card takes the bottom corner. */
 .menubar .hint {
   left: 16px;
+  bottom: auto;
+  top: 16px;
 }
 
 /* ------------------------------------------------------------ small screens */
 
 @media (max-width: 820px) {
-  .board {
+  .rail {
     top: auto;
     bottom: 12px;
     left: 12px;
     right: 12px;
     width: auto;
-    max-height: 42%;
+  }
+
+  .board {
+    max-height: 42vh;
+  }
+
+  /* The board takes the bottom of a small window and the controls the top, so the card has no room. */
+  .app:not(.menubar) .usage {
+    display: none;
   }
 
   .view-controls {
@@ -817,5 +919,162 @@ code {
 
   .hint {
     display: none;
+  }
+}
+
+/* ------------------------------------------------------------ themes */
+
+.theme-picker {
+  position: relative;
+}
+
+.theme-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 100%;
+}
+
+.swatch {
+  display: inline-flex;
+  flex: none;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 0 0 1px rgba(31, 42, 58, 0.14);
+}
+
+.swatch span {
+  width: 6px;
+  height: 14px;
+}
+
+.theme-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  width: 300px;
+  padding: 6px;
+  display: grid;
+  gap: 2px;
+  background: var(--board);
+  backdrop-filter: blur(14px);
+  border-radius: 16px;
+  box-shadow: var(--lift);
+  z-index: 4;
+}
+
+.theme-menu button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  background: none;
+  border: 0;
+  border-radius: 11px;
+  text-align: left;
+}
+
+.theme-menu button:hover {
+  background: var(--wash);
+}
+
+.theme-menu button[aria-checked="true"] {
+  background: var(--ink);
+  color: #fff;
+}
+
+.theme-menu .swatch {
+  grid-row: span 2;
+}
+
+.theme-menu .swatch span {
+  width: 9px;
+  height: 26px;
+}
+
+.theme-name {
+  font: 500 13px/1.2 var(--display);
+}
+
+.theme-blurb {
+  color: var(--ink-2);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+.theme-menu button[aria-checked="true"] .theme-blurb {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+/* A heart (or the like) floating up from something in the room. */
+.emote {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.emote {
+  display: flex;
+  justify-content: center;
+  color: #ef5f7a;
+  font: 600 20px/1 var(--display);
+  text-shadow: 0 2px 6px rgba(20, 30, 48, 0.25);
+  white-space: nowrap;
+  animation: emote 1.6s ease-out forwards;
+}
+
+@keyframes emote {
+  0% {
+    opacity: 0;
+    margin-top: 0;
+    scale: 0.5;
+  }
+  15% {
+    opacity: 1;
+    scale: 1.15;
+  }
+  30% {
+    scale: 1;
+  }
+  100% {
+    opacity: 0;
+    margin-top: -46px;
+  }
+}
+
+.pet-tag {
+  position: absolute;
+  left: 0;
+  top: 0;
+  translate: -50% -100%;
+  padding: 1px 8px 2px;
+  border-radius: 8px;
+  background: rgba(31, 42, 58, 0.86);
+  color: #fff;
+  font: 500 11px/1.3 var(--display);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.pet-tag[hidden] {
+  display: none;
+}
+
+@media (max-width: 820px) {
+  .theme-menu {
+    top: calc(100% + 8px);
+    bottom: auto;
+    width: min(300px, calc(100vw - 24px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .emote {
+    animation: none;
+    margin-top: -20px;
   }
 }

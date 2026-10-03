@@ -16,7 +16,19 @@ bun run dev        # http://localhost:4821
 
 Add `?demo` to the URL for a scripted office that shows every state without
 waiting for real sessions. Add `?light=day` or `?light=night` to pin the
-lighting, which otherwise follows your local clock.
+lighting, which otherwise follows your local clock, and `?theme=lodge` (or any
+theme below) to open in a theme.
+
+### Usage card
+
+The bottom left shows Claude Code usage: how much of the 5-hour and weekly plan
+limits is used, with reset times, and the tokens sent and received over the last
+5 hours, today and the last 7 days. Token totals are counted from your session
+files in `~/.claude/projects`, leaving out cache reads. The plan limits come from
+Anthropic's `/api/oauth/usage` endpoint, using the Claude Code login that the
+server reads from the macOS Keychain (macOS may ask you to allow it once). The
+token stays in the server and is sent only to Anthropic. That endpoint is not
+documented, so if it stops working the bars disappear and the token totals stay.
 
 ### In the macOS menu bar
 
@@ -65,8 +77,8 @@ open it they need to right-click it and choose Open.
 | Thinking                  | Leans back with a claw up                                          |
 | Running subagents         | Mini Clawds with laptops appear in front of the desk               |
 | **Blocked on you**        | Hops and waves, yellow floor ring, yellow bubble                   |
-| Finished a turn           | Cheers, then leans back                                            |
-| Idle for 3 to 30 minutes  | Wanders to the coffee bar, the couch, the bookshelf                |
+| Finished a turn           | Cheers under a burst of confetti, then leans back                  |
+| Idle for 3 to 30 minutes  | Takes a break at one of the office's hangouts, or joins a game     |
 | Idle for 30 min to 2 h    | Asleep on the desk with the monitor off                            |
 | Idle for over 2 hours     | Walks out of the door; its desk is cleared until it is active again |
 | Hitting a tool error      | Flinches while the monitor puffs smoke                             |
@@ -88,6 +100,28 @@ Agents that have gone home stay on the board under "Gone home", and walk back
 in through the door when their session becomes active.
 
 The board on the left lists every agent, most urgent first.
+
+## Themes
+
+The button beside the lighting switch redecorates the office. The desks stay
+put; the floor, walls, windows, furniture along the back wall, the pet, hats
+and desk ornaments change. The choice is remembered.
+
+| Theme        | Hangouts                                                         | Game for two | Pet                   |
+| ------------ | ---------------------------------------------------------------- | ------------ | --------------------- |
+| `studio`     | Coffee bar, water cooler, bookshelf, couch, window               | Ping-pong    | Dusty, a robot vacuum |
+| `greenhouse` | Potting bench, koi pond, garden bench, hammock                   | Tea for two  | Sheldon, a tortoise   |
+| `lodge`      | Armchairs by the fire, cocoa bar, plaid sofa, ski rack           | Chess        | Biscuit, a cat        |
+| `orbital`    | Telescope, hydroponics, snack machine, egg chairs, zero-g lounge | Air hockey   | Sputnik, a drone      |
+| `seaside`    | Juice bar, surfboards, deck chairs, hammock                      | Paddleball   | Pinchy, a crab        |
+
+On a break, a Clawd does whatever its hangout is for, holding the right thing:
+a mug, a book, a fishing rod, a watering can, a paddle. A Clawd waiting at a
+game usually draws the next one to take a break, and then they play: a ball
+or puck goes back and forth, or they take turns at chess, tea or a chat. The
+pet naps at home, sniffs around the free hangouts and goes to sit with Clawds
+on a break; click it for a hop, hover for its name. Each window shows its own
+slice of an animated view that follows the time of day.
 
 ## Opening a terminal
 
@@ -170,23 +204,29 @@ this server to a network without adding authentication first.
 
 ## Assets
 
-Everything in the scene is modeled by `assets/build_assets.py` and exported to
-`public/models/office.glb`. To change a model, edit the script and rebuild
+Everything in the scene is modeled in Python under `assets/kit` and exported to
+`public/models/office.glb` by `assets/build_assets.py`. `kit/office.py` is the
+original kit and each theme has its own module; `kit/core.py` holds the
+palette and the mesh helpers. To change a model, edit its module and rebuild
 (Blender 4.2 or newer on your PATH):
 
 ```sh
 bun run assets                                        # rebuild the GLB
 blender -b -P assets/build_assets.py -- --preview     # also render assets/preview/kit.png
+blender -b -P assets/build_assets.py -- --only lodge --preview /tmp/lodge.png --out /tmp/lodge.glb
 ```
+
+The client finds models and their moving parts by name (`Fireplace_Flame0`,
+`Hammock_Bed`), so keep part names unique and prefixed with their asset's name.
 
 ## Layout
 
 ```
 server/     Bun server: session watcher, transcript parser, Orca bridge, hook endpoint, WebSocket
 shared/     Types shared by server and client
-src/scene/  three.js office: asset kit, Clawd animation, desks, room layout, camera
+src/scene/  three.js office: asset kit, Clawd animation, desks, room layout, themes, pets, camera
 src/ui/     React panels: staff board, an agent's terminal
-assets/     Blender script that builds the model kit
+assets/     Blender scripts that build the model kit, one module per theme
 scripts/    Hook installer
 mac/        Menu bar app (Swift), the entry point it compiles the server from, and its build script
 ```

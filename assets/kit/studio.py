@@ -6,7 +6,9 @@ import bmesh
 import bpy
 from mathutils import Matrix, Vector
 
-from .core import blob, box, colors, cyl, material, root
+from .core import blob as _core_blob
+from .core import colors, cyl, material, root
+from .core import box as _core_box
 
 colors(
     studio_table=("#3E8F8C", 0.5),
@@ -17,6 +19,18 @@ colors(
 
 
 # ------------------------------------------------------------------ helpers
+
+
+def box(name, size, center, mat, parent, radius=0.02, origin=(0, 0, 0), segments=2):
+    """Rounded box (core's, with a lighter default bevel to keep the kit small)."""
+    return _core_box(name, size, center, mat, parent, radius=radius, origin=origin, segments=segments)
+
+
+def blob(*args, **kwargs):
+    """Ellipsoid with plain smooth normals (the weighted-normal pass is meant for boxes)."""
+    obj = _core_blob(*args, **kwargs)
+    obj.modifiers.clear()
+    return obj
 
 
 def _rot(obj, angle, axis="X", about=(0, 0, 0)):

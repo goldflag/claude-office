@@ -1,4 +1,4 @@
-import type { Activity, AgentSnapshot, OfficeSnapshot, SubagentSnapshot, ToolCall } from "../shared/types.ts";
+import type { Activity, AgentSnapshot, OfficeSnapshot, SubagentSnapshot, ToolCall, UsageSnapshot } from "../shared/types.ts";
 
 // A scripted office for `?demo`, so every state can be seen without waiting
 // for real sessions to reach it.
@@ -114,5 +114,13 @@ export function demoSnapshot(): OfficeSnapshot {
     agent(12, "moss", "mobile-app", "thinking"),
   ];
 
-  return { at: now, hooksInstalled: true, canSend: true, agents };
+  const usage: UsageSnapshot = {
+    tokens: { fiveHours: 1_840_000, today: 3_120_000, week: 21_700_000 },
+    limits: {
+      fiveHour: { percent: 62, resetsAt: now + 2 * 3600_000 + 14 * 60_000 },
+      sevenDay: { percent: 38, resetsAt: now + 4 * 86400_000 },
+    },
+  };
+
+  return { at: now, hooksInstalled: true, canSend: true, agents, usage };
 }

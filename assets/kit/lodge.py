@@ -7,7 +7,8 @@ import bpy
 from mathutils import Matrix, Vector
 
 from .core import blob as _core_blob
-from .core import box, colors, cyl, lathe, material, mesh, rod, root, torus
+from .core import box as _core_box
+from .core import colors, cyl, lathe, material, mesh, rod, root, torus
 from .office import couch
 
 colors(
@@ -30,6 +31,11 @@ colors(
 
 
 # ------------------------------------------------------------------ helpers
+
+
+def box(name, size, center, mat, parent, radius=0.02, origin=(0, 0, 0), segments=2):
+    """Rounded box (core's, with a lighter default bevel to keep the kit small)."""
+    return _core_box(name, size, center, mat, parent, radius=radius, origin=origin, segments=segments)
 
 
 def _soft(obj):
@@ -250,7 +256,7 @@ def _stone_courses(prefix, x0, x1, z0, z1, y0, y1, courses, parent, seed, store)
             cz = z + ch / 2 + (noise(row, i, 2) - 0.5) * 0.02
             bulge = 0.016 * noise(row, i, 3)
             shade = shades[int(noise(row, i, 4) * 997) % len(shades)]
-            stone = box(f"{prefix}{k}", (b - a - 0.022, y1 - y0 + bulge, hz), (0, -bulge / 2, 0), shade, parent, radius=0.042, segments=2,
+            stone = box(f"{prefix}{k}", (b - a - 0.022, y1 - y0 + bulge, hz), (0, -bulge / 2, 0), shade, parent, radius=0.04, segments=1,
                         origin=((a + b) / 2, (y0 + y1) / 2, cz))
             _rot(stone, (noise(row, i, 5) - 0.5) * 0.09, "Y")
             store.setdefault(shade, []).append(stone)
@@ -268,12 +274,14 @@ def build_fireplace():
     body_top = mantel - shelf
     # Mortar core, shaped around the firebox, shows in the gaps between stones.
     core = [
-        box("Fireplace_CoreL", (w / 2 - ow / 2 - 0.02, d - 0.02, body_top), (-(w / 2 + ow / 2) / 2, 0.01, body_top / 2), "lodge_mortar", r, radius=0.0),
-        box("Fireplace_CoreR", (w / 2 - ow / 2 - 0.02, d - 0.02, body_top), ((w / 2 + ow / 2) / 2, 0.01, body_top / 2), "lodge_mortar", r, radius=0.0),
-        box("Fireplace_CoreT", (ow + 0.02, d - 0.02, body_top - oz1), (0, 0.01, (oz1 + body_top) / 2), "lodge_mortar", r, radius=0.0),
-        box("Fireplace_CoreB", (ow + 0.02, d - 0.02, oz0), (0, 0.01, oz0 / 2), "lodge_mortar", r, radius=0.0),
+        box("Fireplace_CoreL", (w / 2 - ow / 2 - 0.06, d - 0.03, body_top), (-(w / 2 + ow / 2) / 2 + 0.02, 0.015, body_top / 2), "lodge_mortar", r,
+            radius=0.0),
+        box("Fireplace_CoreR", (w / 2 - ow / 2 - 0.06, d - 0.03, body_top), ((w / 2 + ow / 2) / 2 - 0.02, 0.015, body_top / 2), "lodge_mortar", r,
+            radius=0.0),
+        box("Fireplace_CoreT", (ow + 0.02, d - 0.03, body_top - oz1), (0, 0.015, (oz1 + body_top) / 2), "lodge_mortar", r, radius=0.0),
+        box("Fireplace_CoreB", (ow + 0.02, d - 0.03, oz0), (0, 0.015, oz0 / 2), "lodge_mortar", r, radius=0.0),
         box("Fireplace_CoreBack", (ow + 0.02, yb - cav, oz1 - oz0 + 0.02), (0, (cav + yb) / 2, (oz0 + oz1) / 2), "lodge_mortar", r, radius=0.0),
-        box("Fireplace_CoreChimney", (1.16, 0.43, 2.7 - mantel), (0, yb - 0.225, (mantel + 2.7) / 2 - 0.01), "lodge_mortar", r, radius=0.0),
+        box("Fireplace_CoreChimney", (1.12, 0.42, 2.64 - mantel), (0, yb - 0.21, (mantel + 2.64) / 2), "lodge_mortar", r, radius=0.0),
     ]
     _join(core, "Fireplace_Core")
     stones = {}
@@ -294,7 +302,8 @@ def build_fireplace():
         box("Fireplace_SootTop", (ow, cav - yf, 0.01), (0, (yf + cav) / 2, oz1 - 0.005), "lodge_soot", r, radius=0.0),
     ]
     _join(lining, "Fireplace_Firebox")
-    box("Fireplace_Glow", (ow - 0.16, 0.008, 0.36), (0, cav - 0.014, oz0 + 0.2), material("lodge_glow", emission=1.0), r, radius=0.004)
+    box("Fireplace_Glow", (ow - 0.16, 0.008, 0.36), (0, 0, 0), material("lodge_glow", emission=1.0), r, radius=0.004,
+        origin=(0, cav - 0.014, oz0 + 0.2))
     grate = [box("Fireplace_GrateBar0", (0.5, 0.02, 0.02), (0, -0.16, oz0 + 0.03), "charcoal", r, radius=0.006),
              box("Fireplace_GrateBar1", (0.5, 0.02, 0.02), (0, 0.0, oz0 + 0.03), "charcoal", r, radius=0.006)]
     for k, x in enumerate((-0.22, 0.22)):
@@ -318,11 +327,11 @@ def build_fireplace():
         _teardrop(f"Fireplace_Core{k}", rad * 0.55, h * 0.6, core_mat, flame, origin=(0, -rad * 0.32, 0.0), squash=0.7)
     # Hearth slab, mantel shelf with corbels, two candles and a potted pine.
     box("Fireplace_Hearth", (1.5, 0.34, 0.08), (0, yf - 0.13, 0.04), "lodge_stone_light", r, radius=0.02)
-    box("Fireplace_Mantel", (w + 0.14, d + 0.07, shelf), (0, -0.035, mantel - shelf / 2), "lodge_walnut", r, radius=0.018)
-    corbels = [box(f"Fireplace_Corbel{k}", (0.07, 0.07, 0.12), (sx * 0.8, yf - 0.02, body_top - 0.06), "lodge_walnut", r, radius=0.015)
+    box("Fireplace_Mantel", (w + 0.08, d + 0.07, shelf), (0, -0.035, mantel - shelf / 2), "lodge_walnut", r, radius=0.018)
+    corbels = [box(f"Fireplace_Corbel{k}", (0.07, 0.07, 0.12), (sx * 0.76, yf - 0.02, body_top - 0.06), "lodge_walnut", r, radius=0.015)
                for k, sx in enumerate((-1, 1))]
     _join(corbels, "Fireplace_Corbels")
-    ledge_y = yf - 0.0
+    ledge_y = yf  # the strip of mantel in front of the chimney breast
     for k, (x, h) in enumerate(((-0.66, 0.16), (-0.54, 0.11))):
         cyl(f"Fireplace_Candle{k}", 0.032, 0.032, h, (x, ledge_y, mantel), "cream", r, radius=0.006, segments=18)
         rod(f"Fireplace_CandleWick{k}", (x, ledge_y, mantel + h - 0.002), (x, ledge_y, mantel + h + 0.012), 0.002, "charcoal", r, segments=6)
@@ -478,14 +487,12 @@ def build_ski_rack():
         for k in range(12):
             s = straight * k / 11
             pts.append((0, y0 + lean * s, z0 + s))
-        top = Vector(pts[-1])
         ang0 = math.atan(lean)
         for k in range(1, 9):
             a = ang0 - math.radians(80) * k / 8
             prev = Vector(pts[-1])
             step = (length - straight) / 8
             pts.append(tuple(prev + Vector((0, math.sin(a), math.cos(a))) * step))
-        del top
         return pts
 
     path = ski_path()
@@ -559,7 +566,7 @@ def _mug(prefix, x, y, z, mat, parent, marsh=3):
     cubes = []
     for k in range(marsh):
         a = k * 2.2 + x * 10
-        c = box(f"{prefix}Marsh{k}", (0.022, 0.022, 0.02), (0, 0, 0), "white", parent, radius=0.005,
+        c = box(f"{prefix}Marsh{k}", (0.022, 0.022, 0.02), (0, 0, 0), "white", parent, radius=0.005, segments=1,
                 origin=(x + math.cos(a) * 0.014, y + math.sin(a) * 0.014, z + 0.092 + 0.004 * (k % 2)))
         _rot(c, a, "Z")
         _rot(c, 0.3 * math.sin(a), "X")
@@ -600,8 +607,8 @@ def build_cocoa_bar():
     lathe("CocoaBar_Jar", [(0, 0), (0.05, 0), (0.052, 0.01), (0.052, 0.12), (0.04, 0.13), (0, 0.13)], material("glass", alpha=0.45), r,
           origin=(0.55, 0.12, top), segments=20)
     cyl("CocoaBar_JarLid", 0.042, 0.042, 0.022, (0.55, 0.12, top + 0.125), "copper", r, radius=0.006, segments=20)
-    fill = [box(f"CocoaBar_JarMarsh{k}", (0.026, 0.026, 0.024), (0, 0, 0), "white", r, radius=0.006,
-                origin=(0.55 + 0.022 * math.cos(k * 2.4), 0.12 + 0.022 * math.sin(k * 2.4), top + 0.018 + 0.022 * (k // 3))) for k in range(10)]
+    fill = [box(f"CocoaBar_JarMarsh{k}", (0.026, 0.026, 0.024), (0, 0, 0), "white", r, radius=0.006, segments=1,
+                origin=(0.55 + 0.022 * math.cos(k * 2.4), 0.12 + 0.022 * math.sin(k * 2.4), top + 0.018 + 0.022 * (k // 3))) for k in range(7)]
     for k, c in enumerate(fill):
         _rot(c, k * 0.7, "Z")
     _join(fill, "CocoaBar_JarMarshmallows")
@@ -675,15 +682,15 @@ def _ring_sweep(name, a, b, n, profile, mat, parent, segments=64, ribs=0, rib_de
 
 def build_hat_beanie():
     r = root("Hat_Beanie")
-    a, b, h, z0 = 0.236, 0.176, 0.14, 0.035
+    a, b, h, z0 = 0.226, 0.166, 0.15, 0.03
     seg, rows = 64, 10
     verts, faces = [], []
     for k in range(rows):
         t = k / rows
         z = z0 + (h - z0) * math.sin(t * math.pi / 2)
-        s = math.cos(t * math.pi / 2) ** 0.45
-        for x, y, ang in _superellipse(a, b, 3.4, seg):
-            rib = 1 + 0.03 * math.cos(ang * 32)
+        s = math.cos(t * math.pi / 2) ** 0.7
+        for x, y, ang in _superellipse(a, b, 3.0, seg):
+            rib = 1 + 0.045 * math.cos(ang * 24)
             verts.append((x * s * rib, y * s * rib, z))
     apex = len(verts)
     verts.append((0, 0, h))
@@ -699,7 +706,7 @@ def build_hat_beanie():
     cuff = [(-0.02, 0.0), (-0.004, 0.0), (0.006, 0.006), (0.01, 0.018), (0.01, 0.032), (0.006, 0.044), (-0.004, 0.05), (-0.02, 0.05)]
     _ring_sweep("Hat_Beanie_Band", 0.25, 0.19, 3.4, cuff, "cream", r, ribs=40, rib_depth=0.012)
     # A fluffy pompom: an icosphere with its vertices nudged in and out.
-    pom = blob("Hat_Beanie_Pom", 0.06, (0, 0, 0), (1, 1, 1), "cream", r, origin=(0, 0, h + 0.04), subdivisions=2)
+    pom = blob("Hat_Beanie_Pom", 0.06, (0, 0, 0), (1, 1, 1), "cream", r, origin=(0, 0, h + 0.04), subdivisions=3)
     for v in pom.data.vertices:
         p = v.co
         n = 1 + 0.07 * math.sin(p.x * 211 + p.y * 97) * math.cos(p.z * 157 + p.x * 53)
@@ -729,12 +736,12 @@ def build_wreath():
     base = torus("Wreath_Base", major, 0.042, (0, y, 0), "forest", r, upright=True, segments=32, sides=10)
     _soft(base)
     leaves = {"forest": [], "leaf_dark": [], "moss": []}
-    n = 26
+    n = 22
     for k in range(n):
         a = k / n * math.tau
         for layer, (rr, m, tilt) in enumerate(((major + 0.03, "leaf_dark", 0.5), (major - 0.02, "moss" if k % 2 else "forest", -0.6))):
             cx, cz = math.cos(a) * rr, math.sin(a) * rr
-            leaf = _leaf(f"Wreath_Leaf{layer}_{k}", 0.085, 0.04, m, r, thick=0.012, fold=0.25, curl=0.15)
+            leaf = _leaf(f"Wreath_Leaf{layer}_{k}", 0.09, 0.044, m, r, thick=0.012, fold=0.25, curl=0.15, rows=5, sides=5)
             leaf.data.transform(Matrix.Translation((cx, y - 0.025 - 0.012 * layer, cz)) @ Matrix.Rotation(-(a + math.pi / 2 + tilt), 4, "Y")
                                 @ Matrix.Rotation(math.radians(90), 4, "X"))
             leaves[m].append(leaf)

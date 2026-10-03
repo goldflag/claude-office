@@ -15,6 +15,7 @@ import type {
 } from "../shared/types.ts";
 import { inspectProcess, Orca, OrcaError, type ProcessHost } from "./orca.ts";
 import { readScrollback, TranscriptTail, type TranscriptState } from "./transcript.ts";
+import { Usage } from "./usage.ts";
 
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude");
 /** Set OFFICE_READ_ONLY=1 to run the office as a pure viewer. */
@@ -203,9 +204,17 @@ export class Office {
   private listeners = new Set<(snap: OfficeSnapshot) => void>();
   private tick = 0;
   private orca = new Orca();
-  current: OfficeSnapshot = { at: Date.now(), hooksInstalled: false, canSend: !READ_ONLY, agents: [] };
+  private usage = new Usage();
+  current: OfficeSnapshot = {
+    at: Date.now(),
+    hooksInstalled: false,
+    canSend: !READ_ONLY,
+    agents: [],
+    usage: { tokens: null, limits: null },
+  };
 
   start() {
+    this.usage.start();
     const loop = async () => {
       try {
         await this.refresh();
@@ -329,10 +338,11 @@ export class Office {
     const agents = [...this.agents.values()]
       .map((a) => this.snapshotAgent(a, now))
       .sort((a, b) => a.startedAt - b.startedAt);
-    const json = JSON.stringify([this.hooksInstalled, agents]);
+    const usage = this.usage.current;
+    const json = JSON.stringify([this.hooksInstalled, agents, usage]);
     if (json === this.lastJson) return;
     this.lastJson = json;
-    this.current = { at: now, hooksInstalled: this.hooksInstalled, canSend: !READ_ONLY, agents };
+    this.current = { at: now, hooksInstalled: this.hooksInstalled, canSend: !READ_ONLY, agents, usage };
     for (const fn of this.listeners) fn(this.current);
   }
 

@@ -92,12 +92,39 @@ export interface AgentSnapshot {
   orca: OrcaLink | null;
 }
 
+/** Tokens sent and received, counted from the local session files. Cache reads are not included. */
+export interface TokenUsage {
+  fiveHours: number;
+  today: number;
+  week: number;
+}
+
+/** How much of one of the plan's limits is used, as Anthropic reports it. */
+export interface LimitUsage {
+  /** 0 to 100. */
+  percent: number;
+  resetsAt: number | null;
+}
+
+export interface PlanLimits {
+  fiveHour: LimitUsage | null;
+  sevenDay: LimitUsage | null;
+}
+
+export interface UsageSnapshot {
+  /** Null until the first count of the session files is done. */
+  tokens: TokenUsage | null;
+  /** Null when the plan's limits could not be read, such as with no login or on an API key. */
+  limits: PlanLimits | null;
+}
+
 export interface OfficeSnapshot {
   at: number;
   hooksInstalled: boolean;
   /** False when the server was started read-only and will not send anything to agents. */
   canSend: boolean;
   agents: AgentSnapshot[];
+  usage: UsageSnapshot;
 }
 
 export interface TerminalView {

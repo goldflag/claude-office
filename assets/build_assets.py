@@ -48,8 +48,11 @@ def footprint(obj):
     return lo, hi
 
 
-def render_preview(roots, path):
+def render_preview(roots, path, hidden=()):
     """Lays the kit out in a labelled grid and renders one overview image."""
+    for r in hidden:
+        for o in (r, *r.children_recursive):
+            o.hide_render = True
     bpy.context.view_layer.update()
     sizes = []
     for r in roots:
@@ -125,6 +128,9 @@ def render_preview(roots, path):
         bpy.data.objects.remove(obj, do_unlink=True)
     for r in roots:
         r.location = (0, 0, 0)
+    for r in hidden:
+        for o in (r, *r.children_recursive):
+            o.hide_render = False
 
 
 def main():
@@ -156,7 +162,8 @@ def main():
         raise SystemExit(f"object names must be unique; prefix parts with their asset name: {clashes}")
 
     if "--preview" in argv:
-        render_preview(preview_roots, os.path.abspath(option("--preview", PREVIEW)))
+        others = [r for r in roots if r not in preview_roots]
+        render_preview(preview_roots, os.path.abspath(option("--preview", PREVIEW)), others)
 
     os.makedirs(os.path.dirname(out), exist_ok=True)
     bpy.ops.export_scene.gltf(

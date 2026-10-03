@@ -4,6 +4,7 @@ import { Clawd } from "./Clawd.ts";
 import { damp, hash01, type Kit, part } from "./kit.ts";
 import { SEAT_X, SEAT_Y, SEAT_Z } from "./layout.ts";
 import { Screen } from "./screens.ts";
+import type { Trinket } from "./themes.ts";
 
 const DESK_TOP = 0.62;
 const MAX_MINIS = 4;
@@ -43,10 +44,12 @@ export class Station {
   private puffs: Puff[] = [];
   private puffMaterial = new THREE.MeshBasicMaterial({ color: "#8B8F99", transparent: true, opacity: 0.8 });
   private monitorTop = new THREE.Vector3(MONITOR_X, DESK_TOP + 0.5, MONITOR_Z);
+  private trinket: THREE.Object3D | null = null;
+  private flame: THREE.Object3D | null = null;
 
   constructor(
     private readonly kit: Kit,
-    agentId: string,
+    private readonly agentId: string,
   ) {
     const add = (obj: THREE.Object3D, x: number, y: number, z: number, rotY = 0) => {
       obj.position.set(x, y, z);
@@ -75,13 +78,35 @@ export class Station {
     this.bulb = new THREE.MeshStandardMaterial({ color: "#FFF4D6", emissive: "#FFD27A", emissiveIntensity: 0.2 });
     part(lamp, "DeskLamp_Bulb").material = this.bulb;
 
-    if (hash01(agentId, 3) > 0.45) add(kit.make("PlantSmall"), -0.56, DESK_TOP, -0.2, hash01(agentId, 4) * 6);
 
     this.ringMaterial = new THREE.MeshBasicMaterial({ color: "#FFC83D", transparent: true, opacity: 0, depthWrite: false });
     this.ring = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.78, 48), this.ringMaterial);
     this.ring.rotation.x = -Math.PI / 2;
     this.ring.position.set(SEAT_X, 0.015, SEAT_Z);
     this.group.add(this.ring);
+  }
+
+  /** Puts one of the theme's ornaments on the desk; a few desks go without. */
+  dress(trinkets: Trinket[]) {
+    if (this.trinket) this.group.remove(this.trinket);
+    this.trinket = this.flame = null;
+    const pick = hash01(this.agentId, 3);
+    if (pick < 0.2 || trinkets.length === 0) return;
+    const choice = trinkets[Math.floor(((pick - 0.2) / 0.8) * trinkets.length)]!;
+    let obj: THREE.Object3D;
+    if (choice === "Figurine") {
+      obj = this.kit.make("Clawd");
+      obj.scale.setScalar(0.17);
+    } else if (this.kit.has(choice)) {
+      obj = this.kit.make(choice);
+    } else {
+      return;
+    }
+    obj.position.set(-0.54, DESK_TOP, -0.2);
+    obj.rotation.y = choice === "Figurine" || choice === "PhotoFrame" ? -0.5 : hash01(this.agentId, 4) * 6;
+    this.group.add(obj);
+    this.trinket = obj;
+    this.flame = obj.getObjectByName("Candle_Flame") ?? null;
   }
 
   /** A burst of smoke from the monitor, for a failed tool call. */
@@ -139,6 +164,11 @@ export class Station {
     this.ringMaterial.opacity = damp(this.ringMaterial.opacity, waiting ? 0.45 + pulse * 0.4 : 0, 8, dt);
     this.ring.visible = this.ringMaterial.opacity > 0.01;
     this.ring.scale.setScalar(1 + pulse * 0.12);
+
+    if (this.flame) {
+      const flicker = 1 + Math.sin(t * 13 + this.paperHeight) * 0.12 + Math.sin(t * 29) * 0.08;
+      this.flame.scale.set(1 / flicker, flicker, 1 / flicker);
+    }
 
     for (const [id, mini] of this.minis) {
       mini.grow = damp(mini.grow, mini.leaving ? 0 : 1, 7, dt);

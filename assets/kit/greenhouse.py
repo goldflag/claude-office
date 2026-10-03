@@ -7,7 +7,8 @@ import bpy
 from mathutils import Matrix, Vector
 
 from .core import blob as _core_blob
-from .core import box, colors, cyl, lathe, material, mesh, rod, root, torus
+from .core import box as _core_box
+from .core import colors, cyl, lathe, material, mesh, rod, root, torus
 
 colors(
     gh_pond=("#2C4A52", 0.9),
@@ -24,6 +25,11 @@ colors(
 # ------------------------------------------------------------------ helpers
 
 
+def box(name, size, center, mat, parent, radius=0.02, origin=(0, 0, 0), segments=2):
+    """Rounded box (core's, with a lighter default bevel to keep the kit small)."""
+    return _core_box(name, size, center, mat, parent, radius=radius, origin=origin, segments=segments)
+
+
 def _soft(obj):
     """Plain smooth normals: the weighted-normal pass flattens round shapes into facets."""
     obj.modifiers.clear()
@@ -34,7 +40,7 @@ def blob(*args, **kwargs):
     return _soft(_core_blob(*args, **kwargs))
 
 
-def _ball(name, radius, center, scale, mat, parent, origin=(0, 0, 0), segments=24, rings=12):
+def _ball(name, radius, center, scale, mat, parent, origin=(0, 0, 0), segments=22, rings=10):
     """A smooth UV ellipsoid: rounder than an icosphere for the same triangle count on big blobs."""
     prof = [(radius * math.sin(math.pi * k / rings), -radius * math.cos(math.pi * k / rings)) for k in range(rings + 1)]
     obj = _soft(lathe(name, prof, mat, parent, origin=origin, segments=segments))
@@ -162,7 +168,7 @@ def _leaf(name, length, width, mat, parent, base=(0, 0, 0), yaw=0.0, pitch=0.0, 
     return _soft(mesh(name, verts, faces, mat, parent, origin=origin, smooth=True))
 
 
-def _pot(prefix, r_bottom, r_top, height, base, mat, parent, rim=0.012, soil="coffee", hollow=False, segments=24):
+def _pot(prefix, r_bottom, r_top, height, base, mat, parent, rim=0.012, soil="coffee", hollow=False, segments=18):
     """A flower pot with a rolled rim; filled with soil unless `hollow`."""
     x, y, z = base
     lip = rim * 0.7
@@ -187,7 +193,7 @@ def _pot(prefix, r_bottom, r_top, height, base, mat, parent, rim=0.012, soil="co
             origin=(x, y, z), segments=segments)
 
 
-def _scroll(cy, cz, r0, turns, start, direction=1, steps=40, shrink=0.75):
+def _scroll(cy, cz, r0, turns, start, direction=1, steps=22, shrink=0.75):
     """An iron curl in the YZ plane: a spiral around (cy, cz) that tightens as it turns."""
     pts = []
     for i in range(steps + 1):
@@ -388,7 +394,7 @@ def build_koi_pond():
     cyl("KoiPond_Water", 0.8, 0.8, 0.006, (0, 0, 0.044), material("water", alpha=0.72), r, segments=48)
     pebbles = []
     for i, (a, d, s) in enumerate(((0.4, 0.55, 0.05), (1.9, 0.62, 0.04), (3.3, 0.5, 0.045), (4.6, 0.6, 0.05), (5.6, 0.2, 0.04))):
-        pebbles.append(blob(f"KoiPond_Pebble{i}", s, (math.cos(a) * d, math.sin(a) * d, 0.012), (1.3, 1, 0.45), "stone_dark", r, subdivisions=1))
+        pebbles.append(blob(f"KoiPond_Pebble{i}", s, (math.cos(a) * d, math.sin(a) * d, 0.024), (1.3, 1, 0.45), "stone_dark", r, subdivisions=1))
     _join(pebbles, "KoiPond_Pebbles")
     stones = {0: [], 1: []}
     n = 14
@@ -396,9 +402,9 @@ def build_koi_pond():
         a = i / n * math.tau + 0.06 * math.sin(i * 2.3)
         k = 1 if i % 3 == 1 else 0
         length = 0.34 + 0.04 * math.sin(i * 1.7)
-        depth = 0.2 + 0.025 * math.cos(i * 2.9)
+        depth = 0.18 + 0.02 * math.cos(i * 2.9)
         height = 0.115 + 0.015 * math.sin(i * 3.1)
-        rad = 0.85 + 0.015 * math.cos(i * 1.3)
+        rad = 0.84 + 0.012 * math.cos(i * 1.3)
         s = blob(f"KoiPond_Stone{i}", 0.5, (0, 0, 0), (length, depth, height), "stone_dark" if k else "stone", r,
                  origin=(math.cos(a) * rad, math.sin(a) * rad, height / 2), subdivisions=2)
         _rot(s, a + math.pi / 2, "Z")
@@ -604,7 +610,7 @@ def build_garden_bench():
 
         def iron(name, yz, rad=0.016, sm=4):
             pts = _spline(yz, sm) if len(yz) > 2 else yz
-            parts.append(_tube(f"GardenBench_{side}{name}", [(x, y, z) for y, z in pts], rad, "charcoal", r, sides=8))
+            parts.append(_tube(f"GardenBench_{side}{name}", [(x, y, z) for y, z in pts], rad, "charcoal", r, sides=7))
 
         iron("FrontLeg", [(-0.17, 0.0), (-0.175, 0.3), (-0.17, 0.6)])
         iron("BackLeg", [(0.16, 0.0), (0.165, 0.2), (0.18, 0.45), (0.215, 0.86)])
@@ -695,7 +701,7 @@ def build_tortoise():
     for name, x, y in (("FL", -0.12, -0.09), ("FR", 0.12, -0.09), ("BL", -0.12, 0.1), ("BR", 0.12, 0.1)):
         sx = 1 if x > 0 else -1
         hip = (x, y, 0.07)
-        foot = (sx * 0.036, -0.012 if y < 0 else 0.012, -0.056)
+        foot = (sx * 0.036, -0.012 if y < 0 else 0.012, -0.048)
         leg = rod(f"Tortoise_Leg{name}", (0, 0, 0.0), foot, 0.03, "gh_skin", r, origin=hip, radius_end=0.033, segments=14)
         blob(f"Tortoise_Toes{name}", 0.034, (foot[0], foot[1] * 1.6, -0.06), (1.0, 1.15, 0.3), "gh_skin", leg, subdivisions=2)
     rod("Tortoise_Tail", (0, 0.16, 0.06), (0, 0.195, 0.042), 0.014, "gh_skin", r, radius_end=0.003, segments=8)
@@ -704,7 +710,7 @@ def build_tortoise():
 
 def build_hat_sprout():
     r = root("Hat_Sprout")
-    blob("Hat_Sprout_Base", 0.02, (0, 0, 0.004), (1, 1, 0.45), "leaf_dark", r, subdivisions=2)
+    _ball("Hat_Sprout_Base", 0.02, (0, 0, 0.009), (1, 1, 0.45), "leaf_dark", r, segments=20, rings=8)
     _tube("Hat_Sprout_Stem", _spline([(0, 0, 0.0), (0.004, 0, 0.04), (-0.002, 0, 0.08), (0, 0, 0.092)], 4), 0.008, "leaf_dark", r, sides=8,
           radius_end=0.006)
     leaves = [

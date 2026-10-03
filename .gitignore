@@ -3,3 +3,4 @@ dist
 .DS_Store
 assets/preview
 mac/build
+__pycache__

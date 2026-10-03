@@ -1,4 +1,6 @@
 import type { AgentSnapshot } from "../../shared/types.ts";
+import type { AssetName } from "./kit.ts";
+import type { Theme } from "./themes.ts";
 
 // The room's origin is its back-left corner. X runs right, Z runs toward the
 // camera. The shared area is a strip along the back wall; project pods sit in
@@ -46,6 +48,25 @@ export interface Pod {
   count: number;
 }
 
+/** What a Clawd does once it reaches a hangout spot. */
+export type SpotPose =
+  | "stand"
+  | "sit"
+  | "sip"
+  | "read"
+  | "browse"
+  | "gaze"
+  | "scope"
+  | "warm"
+  | "water"
+  | "fish"
+  | "nap"
+  | "float"
+  | "play"
+  | "chat"
+  | "swing"
+  | "sun";
+
 export interface Spot {
   id: string;
   x: number;
@@ -53,23 +74,73 @@ export interface Spot {
   z: number;
   /** Heading in radians; 0 faces the camera side (+Z). */
   facing: number;
+  pose: SpotPose;
+  /** Something the Clawd holds while it is here, such as a mug or a paddle. */
+  prop?: AssetName;
+  /** A point the Clawd walks through on its way in and out, for seats it must not walk through. */
+  via?: { x: number; z: number };
 }
 
 export interface Furniture {
-  asset: "PlantBig" | "Bookshelf" | "FilingCabinet" | "CoffeeBar" | "WaterCooler" | "Couch" | "CoffeeTable" | "Beanbag";
+  asset: AssetName;
   x: number;
   z: number;
   rotation: number;
   scale: number;
+  y?: number;
+  /** Drifts up and down, for things in zero gravity. */
+  bob?: boolean;
 }
 
-export interface RoomLayout {
+/**
+ * Two spots that play together once both are taken: a ball (or puck) flies
+ * between them, or they take turns, as in chess or a chat.
+ */
+export interface Game {
+  id: string;
+  a: string;
+  b: string;
+  kind: "pong" | "hockey" | "toss" | "turns";
+  /** Where the ball or puck rests between players, and the height it is struck at. */
+  rest?: { x: number; y: number; z: number };
+  hitY?: number;
+  ball?: string;
+}
+
+export interface Rug {
+  shape: "circle" | "rect" | "blob";
+  x: number;
+  z: number;
+  w: number;
+  d: number;
+  color: string;
+}
+
+/** Where the theme's pet lives and rests. */
+export interface PetHome {
+  x: number;
+  z: number;
+  facing: number;
+}
+
+/** What a theme puts in the shared strip along the back wall. */
+export interface Amenities {
+  furniture: Furniture[];
+  spots: Spot[];
+  games: Game[];
+  rugs: Rug[];
+  pet: PetHome;
+  /** Stretches of the back wall that stay free of windows, such as a chimney: [center, half-width]. */
+  wallBlocks: [number, number][];
+  /** Where the clock would like to hang on the back wall. */
+  clockX: number;
+}
+
+export interface RoomLayout extends Amenities {
   width: number;
   depth: number;
   pods: Pod[];
   cells: Map<string, Cell>;
-  spots: Spot[];
-  furniture: Furniture[];
   /** Changes whenever anything that affects static room geometry changes. */
   key: string;
 }
@@ -167,8 +238,12 @@ function pack(groups: PodGroup[], colors: Map<string, string>, maxDepth: number)
   return { pods, cells, width, depth: PODS_Z + deepest + FRONT_PAD };
 }
 
-/** Lays out desks for the agents who are in the office. */
-export function computeLayout(agents: AgentSnapshot[], colors = projectColors(agents.map((a) => a.project))): RoomLayout {
+/** Lays out desks for the agents who are in the office, and the theme's shared area behind them. */
+export function computeLayout(
+  agents: AgentSnapshot[],
+  theme: Theme,
+  colors = projectColors(agents.map((a) => a.project)),
+): RoomLayout {
   const byProject = new Map<string, AgentSnapshot[]>();
   for (const agent of agents) {
     const list = byProject.get(agent.project) ?? [];
@@ -200,39 +275,11 @@ export function computeLayout(agents: AgentSnapshot[], colors = projectColors(ag
   }
   const { pods, cells, width, depth } = best!;
 
-  const kitchen = width / 2;
-  const lounge = width - 3.6;
-  const furniture: Furniture[] = [
-    { asset: "PlantBig", x: 0.85, z: 0.75, rotation: 0.4, scale: 1 },
-    { asset: "Bookshelf", x: 2.3, z: 0.32, rotation: 0, scale: 1 },
-    { asset: "FilingCabinet", x: 3.5, z: 0.42, rotation: 0, scale: 1 },
-    { asset: "FilingCabinet", x: 4.06, z: 0.42, rotation: 0, scale: 1 },
-    { asset: "CoffeeBar", x: kitchen - 0.4, z: 0.45, rotation: 0, scale: 1 },
-    { asset: "WaterCooler", x: kitchen + 0.95, z: 0.4, rotation: 0, scale: 1 },
-    { asset: "Couch", x: lounge, z: 0.6, rotation: 0, scale: 1 },
-    { asset: "CoffeeTable", x: lounge, z: 1.85, rotation: 0, scale: 0.8 },
-    { asset: "Beanbag", x: lounge - 1.55, z: 1.75, rotation: 0.9, scale: 1 },
-    { asset: "Beanbag", x: lounge + 1.6, z: 1.85, rotation: -1.0, scale: 1 },
-    { asset: "PlantBig", x: width - 0.85, z: 0.8, rotation: 2.1, scale: 0.9 },
-  ];
-
-  const back = Math.PI;
-  const spots: Spot[] = [
-    { id: "coffee-a", x: kitchen - 0.78, y: 0, z: 1.2, facing: back },
-    { id: "couch-a", x: lounge - 0.4, y: 0.46, z: 0.52, facing: 0 },
-    { id: "books-a", x: 2.0, y: 0, z: 1.05, facing: back },
-    { id: "bean-a", x: lounge - 1.55, y: 0.34, z: 1.72, facing: 0.9 },
-    { id: "water", x: kitchen + 0.95, y: 0, z: 1.1, facing: back },
-    { id: "couch-b", x: lounge + 0.4, y: 0.46, z: 0.52, facing: 0 },
-    { id: "coffee-b", x: kitchen - 0.02, y: 0, z: 1.25, facing: back },
-    { id: "bean-b", x: lounge + 1.6, y: 0.34, z: 1.82, facing: -1.0 },
-    { id: "books-b", x: 2.75, y: 0, z: 1.1, facing: back },
-    { id: "window", x: 0.85, y: 0, z: 1.5, facing: -Math.PI / 2 },
-    { id: "files", x: 3.78, y: 0, z: 1.2, facing: back },
-    { id: "chat-a", x: lounge - 0.75, y: 0, z: 2.35, facing: 0.7 },
-    { id: "chat-b", x: lounge + 0.8, y: 0, z: 2.4, facing: -0.7 },
-  ];
-
-  const key = [width.toFixed(2), depth.toFixed(2), ...pods.map((p) => `${p.project}:${p.x}:${p.z}:${p.w}:${p.d}:${p.count}`)].join("|");
-  return { width, depth, pods, cells, spots, furniture, key };
+  const key = [
+    theme.id,
+    width.toFixed(2),
+    depth.toFixed(2),
+    ...pods.map((p) => `${p.project}:${p.x}:${p.z}:${p.w}:${p.d}:${p.count}`),
+  ].join("|");
+  return { width, depth, pods, cells, ...theme.amenities(width), key };
 }
