@@ -45,7 +45,7 @@ const POSES: Record<Activity, Partial<Pose>> = {
   waiting: { hop: 1, raiseL: 1.25, wave: 1, eyeOpen: 1.12 },
   done: { lean: -0.2, sway: 0.5 },
   idle: { sway: 0.6 },
-  sleeping: { lean: 0.6, eyeOpen: 0.1, raiseL: -0.35, raiseR: -0.35 },
+  sleeping: { lean: 0.4, eyeOpen: 0.1, raiseL: -0.35, raiseR: -0.35 },
   away: {},
 };
 
@@ -60,6 +60,7 @@ export class Clawd {
 
   private rig: THREE.Object3D;
   private body: THREE.Object3D;
+  private bodyY: number;
   private armL: THREE.Object3D;
   private armR: THREE.Object3D;
   private eyes: THREE.Object3D[];
@@ -79,6 +80,7 @@ export class Clawd {
     this.rig.scale.setScalar(scale);
     this.root.add(this.rig);
     this.body = part(this.rig, "Clawd_Body");
+    this.bodyY = this.body.position.y;
     this.armL = part(this.rig, "Clawd_ArmL");
     this.armR = part(this.rig, "Clawd_ArmR");
     this.eyes = [part(this.rig, "Clawd_EyeL"), part(this.rig, "Clawd_EyeR")];
@@ -123,6 +125,8 @@ export class Clawd {
     // Breathing and landing squash both act on the body, which pivots at its base.
     const breathe = Math.sin(ts * (this.activity === "sleeping" ? 1.3 : 2.4)) * 0.018;
     const squash = 1 + breathe - (p.hop > 0.2 && hop < 0.25 * p.hop ? 0.07 : 0);
+    // Leaning forward lifts the back of the base, so sink the body to keep it on its back legs.
+    this.body.position.y = this.bodyY - Math.max(0, p.lean * still) * 0.09;
     this.body.scale.set(1 + (1 - squash) * 0.5, squash, 1 + (1 - squash) * 0.5);
     this.body.rotation.set(
       p.lean * still + Math.sin(ts * 15) * 0.012 * p.type,

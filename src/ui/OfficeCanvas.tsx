@@ -6,11 +6,13 @@ interface Props {
   snapshot: OfficeSnapshot | null;
   timeMode: TimeMode;
   sceneRef: RefObject<OfficeScene | null>;
+  /** The terminal element the scene pins onto the selected agent's monitor. */
+  screenRef: RefObject<HTMLElement | null>;
   onSelect(id: string | null): void;
 }
 
 /** Mounts the three.js office and feeds it snapshots. */
-export function OfficeCanvas({ snapshot, timeMode, sceneRef, onSelect }: Props) {
+export function OfficeCanvas({ snapshot, timeMode, sceneRef, screenRef, onSelect }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const latest = useRef({ snapshot, timeMode, onSelect });
   latest.current = { snapshot, timeMode, onSelect };
@@ -19,7 +21,10 @@ export function OfficeCanvas({ snapshot, timeMode, sceneRef, onSelect }: Props) 
   useEffect(() => {
     let cancelled = false;
     let scene: OfficeScene | null = null;
-    OfficeScene.create(host.current!, { onSelect: (id) => latest.current.onSelect(id) })
+    OfficeScene.create(host.current!, {
+      onSelect: (id) => latest.current.onSelect(id),
+      screen: () => screenRef.current,
+    })
       .then((created) => {
         if (cancelled) return created.dispose();
         scene = created;
@@ -33,7 +38,7 @@ export function OfficeCanvas({ snapshot, timeMode, sceneRef, onSelect }: Props) 
       scene?.dispose();
       sceneRef.current = null;
     };
-  }, [sceneRef]);
+  }, [sceneRef, screenRef]);
 
   useEffect(() => {
     if (snapshot) sceneRef.current?.setSnapshot(snapshot);

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { looksLikeDialog } from "./orca.ts";
+import { looksLikeDialog } from "../shared/terminal.ts";
 
 const promptBox = [
   "⏺ All 14 tests pass.",

@@ -2,6 +2,8 @@
 // in their environment, which lets the office address the exact terminal a
 // Clawd stands for through the `orca` CLI.
 
+import { looksLikeDialog } from "../shared/terminal.ts";
+
 const ORCA_BIN = process.env.ORCA_BIN ?? "orca";
 const POLL_MS = 5000;
 const POLL_BACKOFF_MS = 30_000;
@@ -85,10 +87,10 @@ export interface OrcaWorktree {
   comment: string | null;
 }
 
-/** A terminal screen that is showing a menu or dialog rather than the prompt box. */
-const DIALOG = /❯\s*\d+\.\s|Esc to cancel|Enter to select|Do you want to /;
-
-export const looksLikeDialog = (lines: string[]) => DIALOG.test(lines.slice(-25).join("\n"));
+function tailOf(result: any): string[] {
+  const tail: unknown = result?.terminal?.tail;
+  return Array.isArray(tail) ? tail.map((line) => String(line).trimEnd()) : [];
+}
 
 /** Cached view of Orca's terminals and worktrees, refreshed while anyone needs it. */
 export class Orca {
@@ -143,9 +145,14 @@ export class Orca {
   }
 
   async read(handle: string, lines = 40): Promise<string[]> {
-    const result = await orca(["terminal", "read", "--terminal", handle, "--limit", String(lines)]);
-    const tail: unknown = result?.terminal?.tail;
-    return Array.isArray(tail) ? tail.map((line) => String(line).trimEnd()) : [];
+    return tailOf(await orca(["terminal", "read", "--terminal", handle, "--limit", String(lines)]));
+  }
+
+  /** The rows the terminal shows right now, as rendered rather than as streamed. */
+  async screen(handle: string): Promise<string[]> {
+    const rows = tailOf(await orca(["terminal", "read", "--terminal", handle, "--screen"]));
+    while (rows.length > 0 && !rows[rows.length - 1]) rows.pop();
+    return rows;
   }
 
   /** Brings the terminal to the front in the Orca window. */

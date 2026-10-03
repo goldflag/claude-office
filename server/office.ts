@@ -486,9 +486,9 @@ export class Office {
     return terminal;
   }
 
-  /** The last lines on the agent's terminal screen. */
+  /** What the agent's terminal screen shows right now. */
   async readTerminal(id: string): Promise<TerminalView> {
-    return { lines: await this.orca.read(this.terminalOf(id).handle) };
+    return { lines: await this.orca.screen(this.terminalOf(id).handle) };
   }
 
   /** Brings the agent's terminal to the front in Orca. */

@@ -24,20 +24,35 @@ lighting, which otherwise follows your local clock.
 bun run menubar    # builds ~/Applications/Claude Office.app and opens it
 ```
 
-A Clawd appears in the menu bar. Click it for the office in a popover, or drag
-the popover away from the menu bar to turn it into a regular window. Open
-Window (⌘N, or opening the app again from Spotlight) does the same. While the
-window is open the app is in the Dock and ⌘-Tab; closing it puts the office back
-in the menu bar. Right-click the Clawd for the popover size (Small and Medium
-stack the board under the office, Large fits the full layout), Restart Server,
-Show Server Log and Open at Login. When an agent needs you, the Clawd gets a
-yellow dot and a count.
+A Clawd appears in the menu bar and shows the state of the office at a glance:
+a yellow dot and a count when agents need you, a ring while agents are working,
+and a check mark for a few seconds when one finishes.
 
-The app starts the server itself, logging to `~/Library/Logs/Claude Office.log`,
-unless one is already running on port 4821, so `bun run dev` still works
-alongside it. It records where this repo, `bun` and your `PATH` are when it is
-built, so run `bun run menubar` again if you move the repo or `bun`. Building
-needs the Xcode command line tools (`xcode-select --install`).
+- **Click** for the office in a popover. Drag the popover off the menu bar, or
+  choose Open Window (⌘N, or open the app again from Spotlight), for a regular
+  window; the app is in the Dock and ⌘-Tab while it is open. Esc closes the
+  popover.
+- **⌥⌘O** shows or hides the office from anywhere.
+- **Right-click** for every agent, grouped like the board. Click one to open
+  the office on it; hold Option to open its terminal in Orca instead. The same
+  menu has the popover size (Small and Medium stack the board under the office,
+  Large fits the full layout), server controls, and Settings.
+- **Notifications** arrive when an agent starts needing you and when one
+  finishes. Click one to open the office on that agent. For agents that Orca
+  launched they offer Open in Orca, and a finished agent can be answered with
+  Reply right from the notification. Each kind can be turned off in Settings.
+- If the exact permission-prompt hooks are not installed, the menu offers to
+  install them.
+
+The server is compiled into the app, so it runs without this repo; rebuild
+with `bun run menubar` to pick up code changes. If `bun run dev` is already
+running, the app uses that server instead of its own. The bundled server logs
+to `~/Library/Logs/Claude Office.log`, and `OFFICE_PORT` moves it off 4821.
+Building needs the Xcode command line tools (`xcode-select --install`).
+
+The build also writes `mac/build/Claude Office.zip`, which you can give to
+someone on an Apple silicon Mac. It is not notarized, so the first time they
+open it they need to right-click it and choose Open.
 
 ## What you are looking at
 
@@ -56,8 +71,7 @@ needs the Xcode command line tools (`xcode-select --install`).
 | Idle for over 2 hours     | Walks out of the door; its desk is cleared until it is active again |
 | Hitting a tool error      | Flinches while the monitor puffs smoke                             |
 
-Monitors face their Clawd, so from the default camera you see their backs;
-right-drag to orbit behind a desk and read the screen.
+Monitors face their Clawd, so from the default camera you see their backs.
 
 Desks are grouped into a rug-colored pod per project, and worktrees of the same
 repository share a pod. The paper stack on each desk grows with the session's
@@ -66,8 +80,22 @@ context size.
 Agents that have gone home stay on the board under "Gone home", and walk back
 in through the door when their session becomes active.
 
-The board on the left lists every agent, most urgent first. Click a row or a
-Clawd for the last prompt, the current tool, subagents and recent activity.
+The board on the left lists every agent, most urgent first.
+
+## Looking at a screen
+
+Click a Clawd, or its row on the board, and the camera flies into its monitor
+while the Clawd hops off its chair to make room. The monitor becomes that
+agent's Claude Code terminal:
+
+- For sessions that Orca launched, it is the live terminal screen, read again
+  every second, and you can type into its prompt box (see below).
+- For other sessions it is a screen pieced together from the session files: the
+  last prompts, tool calls, replies and errors. These can only be watched.
+
+Press Esc, click anywhere around the monitor, or use the Esc button under the
+screen to fly back out. An agent that has gone home has no desk, so its
+terminal opens as a window over the office instead.
 
 ## Where the data comes from
 
@@ -106,13 +134,14 @@ office. Orca puts each terminal's handle in the session's environment, so the
 office knows exactly which terminal a Clawd stands for and drives it through the
 `orca` CLI:
 
-- **Send a message.** The box at the bottom of an agent's details types your
-  text into its terminal as a new prompt (`orca terminal send`). It is typed as
-  is, on one line, so `/commands` and `!` shell mode behave as they do in the
-  terminal. A busy agent queues it behind its current step.
+- **Watch the screen.** The monitor shows what the terminal renders right now
+  (`orca terminal read --screen`).
+- **Type a prompt.** Typing on the monitor fills Claude Code's prompt box, and
+  Enter types your text into the terminal as a new prompt (`orca terminal
+  send`). It is typed as is, on one line, so `/commands` and `!` shell mode
+  behave as they do in the terminal. A busy agent queues it behind its current
+  step. Unsent text is kept per agent while you look at other screens.
 - **Open in Orca.** Brings that terminal to the front (`orca terminal switch`).
-- **Terminal.** Shows the live tail of the agent's terminal screen.
-- The details also show the Orca worktree name, card status and comment.
 
 Messages are refused while an agent is showing a permission prompt or a
 question, because Enter there would accept the highlighted option. The office
@@ -120,7 +149,7 @@ checks both its own state and the terminal screen before typing, and points you
 to Orca to answer instead.
 
 Sessions running elsewhere (Cursor, Terminal, and so on) stay watch-only; the
-details say where each one is running. Start the server with
+bar under the screen says where each one is running. Start the server with
 `OFFICE_READ_ONLY=1` to turn sending off altogether.
 
 ## Privacy and safety
@@ -148,8 +177,8 @@ blender -b -P assets/build_assets.py -- --preview     # also render assets/previ
 server/     Bun server: session watcher, transcript parser, Orca bridge, hook endpoint, WebSocket
 shared/     Types shared by server and client
 src/scene/  three.js office: asset kit, Clawd animation, desks, room layout, camera
-src/ui/     React panels: staff board, agent details
+src/ui/     React panels: staff board, the terminal drawn onto a monitor
 assets/     Blender script that builds the model kit
 scripts/    Hook installer
-mac/        Menu bar app (Swift) and its build script
+mac/        Menu bar app (Swift), the entry point it compiles the server from, and its build script
 ```

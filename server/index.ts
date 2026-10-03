@@ -6,7 +6,8 @@ import { Office } from "./office.ts";
 import { OrcaError } from "./orca.ts";
 
 const PORT = Number(process.env.PORT ?? DEFAULT_PORT);
-const PUBLIC_DIR = join(import.meta.dir, "..", "public");
+// The menu bar app runs a compiled copy of this server and ships the models beside it.
+const PUBLIC_DIR = process.env.OFFICE_PUBLIC_DIR ?? join(import.meta.dir, "..", "public");
 const TOPIC = "office";
 
 const office = new Office();
