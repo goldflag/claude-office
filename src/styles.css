@@ -898,6 +898,11 @@ code {
   .hint {
     display: none;
   }
+
+  /* In a small menu bar popover the lighting follows the clock, leaving room for the reset button. */
+  .menubar .view-controls .segmented {
+    display: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -32,6 +32,8 @@ const STROLL_SPEED = 1.5;
 const HURRY_SPEED = 3.4;
 /** Width in pixels that the roster board takes from the left of the view. */
 const BOARD_INSET = 320;
+/** Share of the height the board takes from the bottom on narrow screens, matching the small-screen CSS. */
+const BOARD_SHARE_NARROW = 0.42;
 
 const DAY = {
   background: new THREE.Color("#B4CDE9"),
@@ -198,6 +200,7 @@ export class OfficeScene {
   private resizeObserver: ResizeObserver;
   private pointerDown: { x: number; y: number } | null = null;
   private inset = 0;
+  private insetBottom = 0;
   private doorPanel: THREE.Object3D | null = null;
   private doorOpen = 0;
   private departed: Actor[] = [];
@@ -644,9 +647,12 @@ export class OfficeScene {
     const { width: W, depth: D } = this.layout;
     const radius = Math.hypot(W, D) / 2;
     const w = Math.max(1, this.container.clientWidth);
-    const aspect = Math.max(0.3, (w - this.inset) / Math.max(1, this.container.clientHeight));
-    const half = THREE.MathUtils.degToRad(this.camera.fov / 2);
-    const fit = radius / Math.sin(Math.min(half, Math.atan(Math.tan(half) * aspect)));
+    const h = Math.max(1, this.container.clientHeight);
+    // Half-angles of the part of the view the panels leave uncovered.
+    const tanHalf = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)) / (h + this.insetBottom);
+    const halfV = Math.atan(tanHalf * (h - this.insetBottom));
+    const halfH = Math.atan(tanHalf * Math.max(0.3 * h, w - this.inset));
+    const fit = radius / Math.sin(Math.min(halfV, halfH));
     const distance = fit * 0.82;
     const target = new THREE.Vector3(0, 0.4, 0);
     this.controls.minDistance = 4;
@@ -671,10 +677,12 @@ export class OfficeScene {
     const w = Math.max(1, this.container.clientWidth);
     const h = Math.max(1, this.container.clientHeight);
     this.renderer.setSize(w, h);
-    // The roster covers the left edge on wide screens, so the view centers beside it.
+    // The roster covers the left edge on wide screens and the bottom on narrow
+    // ones, so the view centers in the part it leaves open.
     this.inset = w > 820 ? BOARD_INSET : 0;
-    this.camera.aspect = (w + this.inset) / h;
-    this.camera.setViewOffset(w + this.inset, h, 0, 0, w, h);
+    this.insetBottom = w > 820 ? 0 : Math.round(h * BOARD_SHARE_NARROW) + 12;
+    this.camera.aspect = (w + this.inset) / (h + this.insetBottom);
+    this.camera.setViewOffset(w + this.inset, h + this.insetBottom, 0, this.insetBottom, w, h);
     this.camera.updateProjectionMatrix();
   }
 

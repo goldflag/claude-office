@@ -18,6 +18,27 @@ Add `?demo` to the URL for a scripted office that shows every state without
 waiting for real sessions. Add `?light=day` or `?light=night` to pin the
 lighting, which otherwise follows your local clock.
 
+### In the macOS menu bar
+
+```sh
+bun run menubar    # builds ~/Applications/Claude Office.app and opens it
+```
+
+A Clawd appears in the menu bar. Click it for the office in a popover, or drag
+the popover away from the menu bar to turn it into a regular window. Open
+Window (⌘N, or opening the app again from Spotlight) does the same. While the
+window is open the app is in the Dock and ⌘-Tab; closing it puts the office back
+in the menu bar. Right-click the Clawd for the popover size (Small and Medium
+stack the board under the office, Large fits the full layout), Restart Server,
+Show Server Log and Open at Login. When an agent needs you, the Clawd gets a
+yellow dot and a count.
+
+The app starts the server itself, logging to `~/Library/Logs/Claude Office.log`,
+unless one is already running on port 4821, so `bun run dev` still works
+alongside it. It records where this repo, `bun` and your `PATH` are when it is
+built, so run `bun run menubar` again if you move the repo or `bun`. Building
+needs the Xcode command line tools (`xcode-select --install`).
+
 ## What you are looking at
 
 | The agent is              | Its Clawd                                                          |
@@ -130,4 +151,5 @@ src/scene/  three.js office: asset kit, Clawd animation, desks, room layout, cam
 src/ui/     React panels: staff board, agent details
 assets/     Blender script that builds the model kit
 scripts/    Hook installer
+mac/        Menu bar app (Swift) and its build script
 ```

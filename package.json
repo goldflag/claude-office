@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "bun --watch server/index.ts",
     "start": "NODE_ENV=production bun server/index.ts",
+    "menubar": "sh mac/build.sh",
     "assets": "blender -b -P assets/build_assets.py",
     "hooks:install": "bun scripts/hooks.ts install",
     "hooks:uninstall": "bun scripts/hooks.ts uninstall",

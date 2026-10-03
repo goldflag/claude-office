@@ -19,6 +19,9 @@ function initialTimeMode(): TimeMode {
   return light === "day" || light === "night" ? light : "auto";
 }
 
+/** `?menubar` is set by the macOS menu bar app, whose small popover has no room for the lighting switch. */
+const MENUBAR = new URLSearchParams(location.search).has("menubar");
+
 export function App() {
   const { snapshot, connected } = useOffice();
   const [selected, setSelected] = useState<string | null>(null);
@@ -45,7 +48,7 @@ export function App() {
   const selectedAgent = agents.find((a) => a.id === selected) ?? null;
 
   return (
-    <div className="app">
+    <div className={MENUBAR ? "app menubar" : "app"}>
       <OfficeCanvas
         snapshot={snapshot}
         timeMode={timeMode}
@@ -89,7 +92,13 @@ export function App() {
 
       {!connected && (
         <div className="notice" role="status">
-          Lost the connection to the office server. Retrying. If it stays down, run <code>bun run dev</code>.
+          {MENUBAR ? (
+            "Lost the connection to the office server. Restarting it."
+          ) : (
+            <>
+              Lost the connection to the office server. Retrying. If it stays down, run <code>bun run dev</code>.
+            </>
+          )}
         </div>
       )}
     </div>
