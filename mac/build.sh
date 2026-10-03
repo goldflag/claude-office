@@ -20,8 +20,10 @@ mkdir -p "$OUT/Contents/MacOS" "$OUT/Contents/Resources"
 swiftc -O -o "$OUT/Contents/MacOS/ClaudeOffice" mac/Sources/*.swift 2>&1 \
   || { echo "Swift build failed. Xcode command line tools are needed: xcode-select --install" >&2; exit 1; }
 
-# NODE_ENV=production makes Bun bundle the page into the binary instead of serving it for HMR.
-NODE_ENV=production bun build --compile --minify mac/entry.ts --outfile "$OUT/Contents/Resources/office-server" >/dev/null
+# --production makes Bun bundle the page into the binary instead of serving it for HMR.
+# The NODE_ENV variable alone is not enough: the page then keeps the dev JSX calls and
+# crashes at startup ("d is not a function") against production React.
+bun build --compile --production mac/entry.ts --outfile "$OUT/Contents/Resources/office-server" >/dev/null
 mkdir -p "$OUT/Contents/Resources/public"
 cp -R public/models "$OUT/Contents/Resources/public/models"
 
