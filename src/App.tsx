@@ -19,7 +19,10 @@ function initialTimeMode(): TimeMode {
   return light === "day" || light === "night" ? light : "auto";
 }
 
-/** `?menubar` is set by the macOS menu bar app, whose small popover has no room for the lighting switch. */
+/**
+ * `?menubar` is set by the macOS menu bar app. Its menu lists the agents, so the
+ * office drops the board, and its small popover has no room for the lighting switch.
+ */
 const MENUBAR = new URLSearchParams(location.search).has("menubar");
 
 declare global {
@@ -52,8 +55,13 @@ export function App() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       // In the menu bar popover, Esc with nothing selected closes the popover.
-      if (selectedRef.current) select(null);
-      else window.webkit?.messageHandlers?.office?.postMessage("close");
+      if (selectedRef.current) {
+        // Handled here, or the web view passes Esc on and the popover closes too.
+        e.preventDefault();
+        select(null);
+      } else {
+        window.webkit?.messageHandlers?.office?.postMessage("close");
+      }
     };
     window.addEventListener("keydown", onKey);
     window.claudeOffice = { select };
@@ -72,19 +80,22 @@ export function App() {
         timeMode={timeMode}
         sceneRef={scene}
         paused={selectedAgent !== null}
+        board={!MENUBAR}
         onSelect={select}
       />
 
       {/* While a terminal fills the view, what is behind it is out of reach of the keyboard too. */}
       <div inert={selectedAgent !== null}>
-        <Roster
-          agents={agents}
-          loaded={snapshot !== null}
-          hooksInstalled={snapshot?.hooksInstalled ?? true}
-          selected={selected}
-          projectColors={projectColors}
-          onSelect={select}
-        />
+        {!MENUBAR && (
+          <Roster
+            agents={agents}
+            loaded={snapshot !== null}
+            hooksInstalled={snapshot?.hooksInstalled ?? true}
+            selected={selected}
+            projectColors={projectColors}
+            onSelect={select}
+          />
+        )}
 
         <div className="view-controls">
           <div className="segmented" role="group" aria-label="Lighting">

@@ -34,9 +34,9 @@ and a check mark for a few seconds when one finishes.
   popover.
 - **⌥⌘O** shows or hides the office from anywhere.
 - **Right-click** for every agent, grouped like the board. Click one to open
-  the office on it; hold Option to open its terminal in Orca instead. The same
-  menu has the popover size (Small and Medium stack the board under the office,
-  Large fits the full layout), server controls, and Settings.
+  the office on it; hold Option to open its terminal in Orca instead. This
+  list takes the place of the board, which the app leaves out of the office.
+  The same menu has the popover size, server controls, and Settings.
 - **Notifications** arrive when an agent starts needing you and when one
   finishes. Click one to open the office on that agent. For agents that Orca
   launched they offer Open in Orca, and a finished agent can be answered with
@@ -58,24 +58,31 @@ open it they need to right-click it and choose Open.
 
 | The agent is              | Its Clawd                                                          |
 | ------------------------- | ------------------------------------------------------------------ |
-| Editing files             | Types fast; the monitor scrolls code with diff highlights          |
-| Running a command         | Types in bursts; the monitor is a green terminal                   |
-| Reading or searching      | Leans in and scans; the monitor shows a page                       |
-| On the web                | The monitor shows a spinning globe                                 |
-| Thinking                  | Leans back with a claw up; three dots on the monitor               |
+| Editing files             | Types fast                                                         |
+| Running a command         | Types in bursts                                                    |
+| Reading or searching      | Leans in and scans                                                 |
+| On the web                | Leans in and scans                                                 |
+| Thinking                  | Leans back with a claw up                                          |
 | Running subagents         | Mini Clawds with laptops appear in front of the desk               |
-| **Blocked on you**        | Hops and waves, yellow floor ring, flashing monitor, yellow bubble |
-| Finished a turn           | Cheers, then leans back with a check mark on the monitor           |
+| **Blocked on you**        | Hops and waves, yellow floor ring, yellow bubble                   |
+| Finished a turn           | Cheers, then leans back                                            |
 | Idle for 3 to 30 minutes  | Wanders to the coffee bar, the couch, the bookshelf                |
 | Idle for 30 min to 2 h    | Asleep on the desk with the monitor off                            |
 | Idle for over 2 hours     | Walks out of the door; its desk is cleared until it is active again |
 | Hitting a tool error      | Flinches while the monitor puffs smoke                             |
 
-Monitors face their Clawd, so from the default camera you see their backs.
+Each monitor shows a small Claude Code screen drawn from the session's
+transcript: your prompts, tool calls with green, red or blinking dots, Claude's
+replies, the spinner while it works, and the permission, question or plan
+dialog when it is waiting on you. Monitors face their Clawd, so from the
+default camera you see their backs.
 
 Desks are grouped into a rug-colored pod per project, and worktrees of the same
 repository share a pod. The paper stack on each desk grows with the session's
 context size.
+
+Hover over a Clawd to see what its session is working on: the Orca worktree's
+title when it has one, otherwise Claude Code's session title or the last prompt.
 
 Agents that have gone home stay on the board under "Gone home", and walk back
 in through the door when their session becomes active.

@@ -126,7 +126,7 @@ export class Station {
   update(t: number, dt: number, agent: AgentSnapshot, night: number, seated: boolean) {
     // An empty chair shows a dark screen unless work is going on.
     const working = agent.activity !== "idle" && agent.activity !== "sleeping" && agent.activity !== "done";
-    this.screen.draw(seated || working ? agent.activity : "sleeping", t);
+    this.screen.draw(agent, (seated || working) && agent.activity !== "sleeping" && agent.activity !== "away", t);
 
     const fill = Math.min(1, agent.contextTokens / 1_000_000) ** 0.6;
     this.paperHeight = damp(this.paperHeight, 0.004 + fill * 0.24, 3, dt);

@@ -1,7 +1,7 @@
 import * as THREE from "three/webgpu";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { AgentSnapshot, OfficeSnapshot } from "../../shared/types.ts";
-import { describeAgent } from "../describe.ts";
+import { describeAgent, groupOf, taskOf } from "../describe.ts";
 import { Clawd } from "./Clawd.ts";
 import { damp, hash01, Kit, part } from "./kit.ts";
 import {
@@ -24,6 +24,8 @@ export type TimeMode = "auto" | "day" | "night";
 
 export interface OfficeCallbacks {
   onSelect(id: string | null): void;
+  /** False when there is no roster board, so the view need not make room for it. */
+  board?: boolean;
 }
 
 const WALL_H = 3;
@@ -61,37 +63,66 @@ function nightFactor(mode: TimeMode): number {
   return (h - 17) / 3;
 }
 
+/**
+ * Orca's session marker: a spinner while the agent works, a dot once it is
+ * ready for you. Needing you, sleeping and away carry their own signals.
+ */
+function statusOf(activity: AgentSnapshot["activity"]): "working" | "ready" | null {
+  const group = groupOf(activity);
+  if (group === "working") return "working";
+  if (group === "done" || group === "idle") return "ready";
+  return null;
+}
+
 /** The floating name and status bubble above one agent, drawn in the DOM. */
 class Tag {
   readonly el = document.createElement("div");
   private bubble = document.createElement("div");
+  private status = document.createElement("span");
+  private label = document.createElement("span");
   private name = document.createElement("div");
+  private task = document.createElement("div");
   private text = "";
 
   constructor(parent: HTMLElement) {
     this.el.className = "tag";
     this.bubble.className = "tag-bubble";
+    this.status.className = "tag-status";
+    this.status.setAttribute("aria-hidden", "true");
+    this.label.className = "tag-text";
+    this.bubble.append(this.status, this.label);
     this.name.className = "tag-name";
+    this.task.className = "tag-task";
+    const label = document.createElement("div");
+    label.className = "tag-label";
+    label.append(this.name, this.task);
     const stack = document.createElement("div");
     stack.className = "tag-stack";
-    stack.append(this.bubble, this.name);
+    stack.append(label, this.bubble);
     this.el.append(stack);
     parent.append(this.el);
   }
 
-  set(agent: AgentSnapshot, emphasized: boolean, away: boolean) {
+  /** The name, and `task` under it, are shown only while the pointer is over the agent. */
+  set(agent: AgentSnapshot, hovered: boolean, away: boolean, task: string | null) {
     const state = agent.activity;
     const quiet = state === "idle" || state === "sleeping" || state === "away";
     const text = state === "sleeping" ? "z z z" : quiet ? "" : describeAgent(agent);
     if (text !== this.text) {
       this.text = text;
-      this.bubble.textContent = text;
+      this.label.textContent = text;
     }
+    const status = statusOf(state);
     this.name.textContent = agent.name;
+    if (this.task.textContent !== (task ?? "")) this.task.textContent = task ?? "";
+    this.task.hidden = !task;
     this.el.dataset.state = state;
-    this.el.dataset.emphasis = emphasized ? "1" : "0";
+    this.el.dataset.status = status ?? "";
+    this.el.dataset.emphasis = hovered ? "1" : "0";
     this.el.dataset.away = away ? "1" : "0";
-    this.bubble.hidden = text === "";
+    this.status.hidden = status === null;
+    this.label.hidden = text === "";
+    this.bubble.hidden = text === "" && status === null;
   }
 
   place(x: number, y: number, visible: boolean) {
@@ -671,8 +702,9 @@ export class OfficeScene {
     this.renderer.setSize(w, h);
     // The roster covers the left edge on wide screens and the bottom on narrow
     // ones, so the view centers in the part it leaves open.
-    this.inset = w > 820 ? BOARD_INSET : 0;
-    this.insetBottom = w > 820 ? 0 : Math.round(h * BOARD_SHARE_NARROW) + 12;
+    const board = this.callbacks.board !== false;
+    this.inset = board && w > 820 ? BOARD_INSET : 0;
+    this.insetBottom = !board || w > 820 ? 0 : Math.round(h * BOARD_SHARE_NARROW) + 12;
     this.camera.aspect = (w + this.inset) / (h + this.insetBottom);
     this.camera.setViewOffset(w + this.inset, h + this.insetBottom, 0, this.insetBottom, w, h);
     this.camera.updateProjectionMatrix();
@@ -895,18 +927,18 @@ export class OfficeScene {
   private placeTags() {
     const w = this.container.clientWidth;
     const h = this.container.clientHeight;
-    const close = this.camera.position.distanceTo(this.controls.target) < 16;
     const v = new THREE.Vector3();
     for (const actor of this.actors.values()) {
       const { snap } = actor;
       const emphasized = snap.id === this.selected || snap.id === this.hovered;
-      const quiet = snap.activity === "idle" || snap.activity === "sleeping" || snap.activity === "away";
-      actor.tag.set(snap, emphasized || close || snap.activity === "waiting", actor.mode !== "desk");
+      const hovered = snap.id === this.hovered;
+      actor.tag.set(snap, hovered, actor.mode !== "desk", hovered ? taskOf(snap) : null);
       actor.clawd.root.getWorldPosition(v);
       const lift = snap.activity === "waiting" ? 0.5 : snap.activity === "sleeping" && actor.mode === "desk" ? 0.12 : 0.34;
       v.y += 0.52 * CLAWD_SCALE + lift;
       v.project(this.camera);
-      const visible = v.z < 1 && (emphasized || close || !quiet || snap.activity === "sleeping");
+      // Every Clawd in the office keeps its status marker; one gone home shows only when picked.
+      const visible = v.z < 1 && (emphasized || snap.activity !== "away");
       actor.tag.place((v.x * 0.5 + 0.5) * w, (-v.y * 0.5 + 0.5) * h, visible);
       actor.tag.el.style.zIndex = emphasized ? "3" : snap.activity === "waiting" ? "2" : "1";
     }

@@ -24,7 +24,72 @@ export type AssetName =
   | "MiniDesk"
   | "Clock"
   | "CoffeeTable"
-  | "Door";
+  | "Door"
+  // Studio
+  | "PingPongTable"
+  | "Paddle"
+  | "HeldBook"
+  | "RobotVacuum"
+  | "VacuumDock"
+  | "RubberDuck"
+  | "PhotoFrame"
+  | "BookStack"
+  // Greenhouse
+  | "PottingBench"
+  | "WateringCan"
+  | "FishingRod"
+  | "KoiPond"
+  | "TeaTable"
+  | "Stool"
+  | "FigTree"
+  | "Hammock"
+  | "GardenBench"
+  | "HangingPlant"
+  | "Tortoise"
+  | "Hat_Sprout"
+  | "Cactus"
+  | "Succulent"
+  // Lodge
+  | "Fireplace"
+  | "Armchair"
+  | "ChessTable"
+  | "LogStool"
+  | "SkiRack"
+  | "Firewood"
+  | "CocoaBar"
+  | "SofaPlaid"
+  | "Cat"
+  | "CatBed"
+  | "Hat_Beanie"
+  | "MiniPine"
+  | "Candle"
+  | "Wreath"
+  // Orbital
+  | "Porthole"
+  | "Hydroponics"
+  | "Telescope"
+  | "AirHockeyTable"
+  | "VendingMachine"
+  | "PodChair"
+  | "SofaOrbital"
+  | "BeanbagViolet"
+  | "Drone"
+  | "Hat_Antenna"
+  | "MiniRocket"
+  | "Globe"
+  // Seaside
+  | "SurfboardRack"
+  | "Lifebuoy"
+  | "JuiceBar"
+  | "DeckChair"
+  | "BeachUmbrella"
+  | "PalmPlant"
+  | "BeachPaddle"
+  | "Crab"
+  | "Hat_Straw"
+  | "Hat_Sunglasses"
+  | "Seashell"
+  | "Pail";
 
 /** The Blender-built asset kit: one GLB whose top-level nodes are cloned by name. */
 export class Kit {
@@ -40,6 +105,10 @@ export class Kit {
     return new Kit(gltf.scene);
   }
 
+  has(name: AssetName): boolean {
+    return this.source.getObjectByName(name) !== undefined;
+  }
+
   /** Clones an asset. Geometry and materials are shared between clones. */
   make(name: AssetName): THREE.Object3D {
     const src = this.source.getObjectByName(name);
@@ -48,6 +117,15 @@ export class Kit {
     clone.position.set(0, 0, 0);
     return clone;
   }
+}
+
+/** Every object under `root` whose name starts with `prefix`, such as all of a fireplace's flames. */
+export function parts<T extends THREE.Object3D = THREE.Mesh>(root: THREE.Object3D, prefix: string): T[] {
+  const found: T[] = [];
+  root.traverse((o) => {
+    if (o.name.startsWith(prefix)) found.push(o as T);
+  });
+  return found;
 }
 
 export function part<T extends THREE.Object3D = THREE.Mesh>(root: THREE.Object3D, name: string): T {

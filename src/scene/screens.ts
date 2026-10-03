@@ -1,207 +1,310 @@
 import * as THREE from "three/webgpu";
-import type { Activity } from "../../shared/types.ts";
+import type { ActionEntry, AgentSnapshot, SubagentSnapshot } from "../../shared/types.ts";
+import { block } from "../../shared/terminal.ts";
+import { describeWork, groupOf } from "../describe.ts";
 
-const W = 192;
-const H = 120;
+const W = 512;
+const H = 320;
+const FONT_PX = 12;
+const LINE = 15;
+const PAD_X = 10;
+const PAD_Y = 8;
+const ROWS = Math.floor((H - PAD_Y * 2) / LINE);
+const FONT = `${FONT_PX}px Menlo, "SF Mono", ui-monospace, Consolas, monospace`;
+/** A long reply would push everything else off the little screen, so it is cut short. */
+const TEXT_ROWS = 6;
 
-const CODE_COLORS = ["#7FD1B9", "#F2C879", "#E58A6B", "#9DB7F5", "#C8CDD6"];
-
-/** Deterministic pseudo-random in 0..1 for stable procedural screen content. */
-const rnd = (n: number) => {
-  const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
-  return x - Math.floor(x);
+// Claude Code's dark theme.
+const C = {
+  bg: "#1A1918",
+  off: "#0F1114",
+  fg: "#E6E2DC",
+  dim: "#8C8984",
+  faint: "#56534F",
+  claude: "#D77757",
+  shimmer: "#F7B79C",
+  ok: "#4EBA65",
+  err: "#FF6B80",
+  ask: "#B1B9F9",
+  userBg: "#2C2B29",
 };
 
-/** A monitor face: a small canvas redrawn to show what the agent is doing. */
+const SPINNER = ["·", "✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳", "✢"];
+const VERBS = [
+  "Thinking", "Cogitating", "Pondering", "Noodling", "Percolating", "Musing", "Brewing", "Tinkering",
+  "Clauding", "Spelunking", "Wrangling", "Simmering", "Mulling", "Synthesizing", "Conjuring", "Moseying",
+];
+
+/** A run of text in one style; `cursor` draws the blinking block, `blink` a dot that pulses. */
+interface Span {
+  text: string;
+  color: string;
+  bold?: boolean;
+  fx?: "cursor" | "blink";
+}
+
+interface Row {
+  spans: Span[];
+  bg?: string;
+}
+
+const span = (text: string, color = C.fg, extra: Partial<Span> = {}): Span => ({ text, color, ...extra });
+const row = (...spans: Span[]): Row => ({ spans });
+const BLANK: Row = { spans: [] };
+const clip = (text: string, n: number) => (text.length > n ? `${text.slice(0, Math.max(0, n - 1))}…` : text);
+const toolLabel = (name: string) => name.replace(/^mcp__(.+?)__/, "$1: ");
+
+/** Rows framed in a rounded box, the way Claude Code draws its welcome banner and dialogs. */
+function boxed(lines: Span[][], width: number, border: string): Row[] {
+  const inner = width - 4;
+  const edge = (l: string, r: string) => row(span(l + "─".repeat(width - 2) + r, border));
+  return [
+    edge("╭", "╮"),
+    ...lines.map((spans) => {
+      let room = inner;
+      const fitted = spans.map((s) => {
+        const text = clip(s.text, room);
+        room -= text.length;
+        return { ...s, text };
+      });
+      return row(span("│ ", border), ...fitted, span(" ".repeat(room) + " │", border));
+    }),
+    edge("╰", "╯"),
+  ];
+}
+
+function elapsed(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
+}
+
+/** The transcript, newest last, drawn the way Claude Code draws it. */
+function transcript(agent: AgentSnapshot, working: boolean, cols: number): Row[] {
+  const home = agent.cwd.replace(/^\/Users\/[^/]+/, "~");
+  const rows: Row[] = [
+    ...boxed(
+      [
+        [span("✻", C.claude), span(" Welcome to "), span("Claude Code", C.fg, { bold: true }), span("!")],
+        [],
+        [span(`  cwd: ${home}`, C.dim)],
+      ],
+      Math.min(cols, Math.max(34, home.length + 13)),
+      C.claude,
+    ),
+    BLANK,
+  ];
+
+  const entries: ActionEntry[] = [...agent.recent];
+  const tool = working ? agent.currentTool : null;
+  let running = -1;
+  if (tool) {
+    const label = toolLabel(tool.name);
+    running = entries.findLastIndex((e) => e.kind === "tool");
+    const last = entries[running];
+    if (!last || last.label !== label || last.detail !== tool.summary || entries.slice(running).some((e) => e.kind !== "tool")) {
+      entries.push({ at: tool.startedAt, kind: "tool", label, detail: tool.summary });
+      running = entries.length - 1;
+    }
+  }
+
+  // Subagents hang under the call that started them when it can be found, and under the newest call otherwise.
+  const subs = new Map<string, SubagentSnapshot>();
+  for (const sub of working ? agent.subagents : []) subs.set(sub.description, sub);
+  const subRows = (sub: SubagentSnapshot) =>
+    row(span("  ⎿  ", C.dim), span(clip(`${sub.description}: ${describeWork(sub.activity, sub.currentTool)}`, cols - 5), C.dim));
+
+  entries.forEach((entry, i) => {
+    if (entry.kind === "prompt") {
+      const lines = block(entry.detail, "> ", "  ", cols - 1).slice(-3);
+      rows.push(...lines.map((text) => ({ spans: [span(text.padEnd(cols), C.dim)], bg: C.userBg })), BLANK);
+    } else if (entry.kind === "text") {
+      let lines = block(entry.detail, "  ", "  ", cols);
+      if (lines.length > TEXT_ROWS) lines = [...lines.slice(0, TEXT_ROWS - 1), "  …"];
+      lines.forEach((text, j) => rows.push(row(span(j === 0 ? "⏺" : " ", C.fg), span(text.slice(1)))));
+      rows.push(BLANK);
+    } else if (entry.kind === "error") {
+      const lines = block(entry.detail, "Error: ", "", cols - 5).slice(0, 2);
+      lines.forEach((text, j) => rows.push(row(span(j === 0 ? "  ⎿  " : "     ", C.dim), span(text, C.err))));
+    } else {
+      const failed = entries[i + 1]?.kind === "error";
+      const live = i === running;
+      const args = entry.detail ? `(${clip(entry.detail, cols - entry.label.length - 4)})` : "";
+      rows.push(
+        row(
+          span("⏺", live ? C.fg : failed ? C.err : C.ok, live ? { fx: "blink" } : {}),
+          span(" "),
+          span(entry.label, C.fg, { bold: true }),
+          span(args, C.fg),
+        ),
+      );
+      const sub = subs.get(entry.detail);
+      if (sub) {
+        rows.push(subRows(sub));
+        subs.delete(entry.detail);
+      } else if (live && entry.label === "Bash" && subs.size === 0) {
+        rows.push(row(span("  ⎿  ", C.dim), span("Running…", C.dim)));
+      }
+      if (live) for (const left of subs.values()) rows.push(subRows(left));
+      if (live) subs.clear();
+    }
+  });
+  // Subagents whose call could not be found get rows of their own.
+  for (const sub of subs.values()) {
+    rows.push(row(span("⏺", C.fg, { fx: "blink" }), span(" "), span("Task", C.fg, { bold: true }), span(`(${clip(sub.description, cols - 8)})`)));
+    rows.push(subRows(sub));
+  }
+  return rows;
+}
+
+/** What sits under the transcript: the prompt box, or the dialog that is waiting on you. */
+function footer(agent: AgentSnapshot, cols: number): { rows: Row[]; dialog: boolean } {
+  const ask = agent.needsYou;
+  if (ask) {
+    const lines: Span[][] = [];
+    const option = (n: number, text: string) => [span(n === 1 ? "❯ " : "  ", C.ask), span(`${n}. ${text}`, n === 1 ? C.ask : C.fg)];
+    if (ask.reason === "plan") {
+      lines.push([span("Ready to code?", C.ask, { bold: true })], [], [span("Would you like to proceed?")]);
+      lines.push(option(1, "Yes, and auto-accept edits"), option(2, "Yes, manually approve edits"), option(3, "No, keep planning"));
+    } else if (ask.reason === "question") {
+      lines.push([span("☐ ", C.ask), span("Question", C.ask, { bold: true })], []);
+      lines.push(...block(ask.message, "", "", cols - 4).slice(0, 3).map((t) => [span(t)]));
+      lines.push([], [span("Enter to select · ↑/↓ to navigate · Esc to cancel", C.dim)]);
+    } else {
+      const tool = agent.currentTool;
+      const bash = tool?.name === "Bash";
+      lines.push([span(bash ? "Bash command" : "Tool use", C.ask, { bold: true })], []);
+      if (tool) lines.push([span(`  ${bash ? tool.summary : `${toolLabel(tool.name)}(${tool.summary})`}`)]);
+      else lines.push([span(`  ${ask.message}`, C.dim)]);
+      lines.push([], [span("Do you want to proceed?")]);
+      lines.push(option(1, "Yes"), option(2, "Yes, and don't ask again this session"), option(3, "No, and tell Claude what to do differently"));
+    }
+    return { rows: boxed(lines, cols, C.ask), dialog: true };
+  }
+
+  const rule = row(span("─".repeat(cols), C.faint));
+  const model = (agent.model ?? "")
+    .replace(/^claude-|-\d{8}$|\[.*\]$/g, "")
+    .replace(/-(\d+)-(\d+)$/, " $1.$2")
+    .replace(/^\w/, (ch) => ch.toUpperCase());
+  const hint = "  ? for shortcuts";
+  return {
+    rows: [
+      rule,
+      row(span("> ", C.fg), span(" ", C.fg, { fx: "cursor" })),
+      rule,
+      row(span(hint, C.dim), span(model.padStart(cols - hint.length), C.dim)),
+    ],
+    dialog: false,
+  };
+}
+
+/** A monitor face: a little Claude Code terminal showing the agent's session. */
 export class Screen {
   readonly canvas = document.createElement("canvas");
   readonly texture: THREE.CanvasTexture;
   readonly material: THREE.MeshBasicMaterial;
   private ctx: CanvasRenderingContext2D;
-  private lastDraw = -1;
-  private seed = Math.random() * 1000;
+  private charW: number;
+  private cols: number;
+  private agent: AgentSnapshot | null = null;
+  private rows: Row[] = [];
+  private working = false;
+  private turnStart = 0;
+  private verb = VERBS[0]!;
+  /** Row the spinner takes, or -1 when there is none. */
+  private spinnerAt = -1;
+  private version = 0;
+  private drawn = "";
 
   constructor() {
     this.canvas.width = W;
     this.canvas.height = H;
     this.ctx = this.canvas.getContext("2d")!;
+    this.ctx.font = FONT;
+    this.charW = this.ctx.measureText("M").width;
+    this.cols = Math.floor((W - PAD_X * 2) / this.charW);
     this.texture = new THREE.CanvasTexture(this.canvas);
     this.texture.colorSpace = THREE.SRGBColorSpace;
     this.texture.flipY = false;
+    this.texture.anisotropy = 4;
     this.material = new THREE.MeshBasicMaterial({ map: this.texture });
   }
 
-  /** Redraws at most ten times a second; screens do not need more. */
-  draw(activity: Activity, t: number) {
-    const frame = Math.floor(t * 10);
-    if (frame === this.lastDraw) return;
-    this.lastDraw = frame;
-    const c = this.ctx;
-    const s = this.seed;
+  private layout(agent: AgentSnapshot) {
+    this.agent = agent;
+    this.working = groupOf(agent.activity) === "working";
+    this.version++;
+    const { rows, dialog } = footer(agent, this.cols);
+    // While Claude works, the spinner sits between blank rows above the prompt box.
+    const spin = this.working && !dialog;
+    this.rows = [...transcript(agent, this.working, this.cols), ...(spin ? [BLANK, BLANK, BLANK] : [BLANK]), ...rows];
+    this.spinnerAt = spin ? this.rows.length - rows.length - 2 : -1;
+    const prompt = agent.recent.findLast((e) => e.kind === "prompt");
+    this.turnStart = prompt?.at ?? agent.currentTool?.startedAt ?? agent.lastActivityAt;
+    this.verb = VERBS[Math.floor(this.turnStart / 1000) % VERBS.length]!;
+  }
 
-    const fill = (color: string) => {
-      c.fillStyle = color;
-      c.fillRect(0, 0, W, H);
-    };
-    const bar = (x: number, y: number, w: number, h: number, color: string) => {
-      c.fillStyle = color;
-      c.beginPath();
-      c.roundRect(x, y, w, h, h / 2);
-      c.fill();
-    };
-
-    switch (activity) {
-      case "writing": {
-        fill("#232733");
-        const scroll = t * 2.2;
-        const first = Math.floor(scroll);
-        for (let i = -1; i < 9; i++) {
-          const line = first + i;
-          const y = 10 + (i - (scroll - first)) * 13;
-          const k = rnd(line + s);
-          const indent = 10 + Math.floor(rnd(line * 3 + s) * 3) * 12;
-          if (k > 0.78) {
-            c.fillStyle = k > 0.9 ? "rgba(232,104,92,0.35)" : "rgba(98,196,140,0.35)";
-            c.fillRect(0, y - 3, W, 12);
-          }
-          let x = indent;
-          for (let j = 0; j < 3; j++) {
-            const w = 14 + rnd(line * 7 + j + s) * 42;
-            if (x + w > W - 8) break;
-            bar(x, y, w, 6, CODE_COLORS[Math.floor(rnd(line + j * 5 + s) * CODE_COLORS.length)]!);
-            x += w + 6;
-          }
-        }
-        break;
-      }
-      case "terminal": {
-        fill("#141a17");
-        const step = Math.floor(t * 5);
-        const rows = 7;
-        for (let i = 0; i < rows; i++) {
-          const line = step - (rows - 1 - i);
-          const y = 12 + i * 15;
-          const isPrompt = Math.floor(rnd(Math.floor(line / 3) + s) * 3) === ((line % 3) + 3) % 3;
-          const w = (isPrompt ? 30 : 50) + rnd(line + s) * 90;
-          if (isPrompt) bar(8, y, 7, 6, "#F2C879");
-          bar(isPrompt ? 20 : 8, y, w, 6, isPrompt ? "#D8F3DC" : "#52B788");
-        }
-        if (frame % 6 < 3) {
-          c.fillStyle = "#D8F3DC";
-          c.fillRect(8, 12 + rows * 15 - 2, 9, 9);
-        }
-        break;
-      }
-      case "reading": {
-        fill("#F3EEE2");
-        for (let i = 0; i < 8; i++) {
-          const w = 110 + rnd(i + s) * 60;
-          bar(12, 12 + i * 13, i % 4 === 3 ? w * 0.5 : w, 5, "#B9B2A3");
-        }
-        const y = 9 + ((t * 0.9) % 8) * 13;
-        c.fillStyle = "rgba(242,186,62,0.45)";
-        c.fillRect(8, y, W - 16, 11);
-        break;
-      }
-      case "web": {
-        fill("#EAF1F8");
-        c.fillStyle = "#C9D6E4";
-        c.fillRect(0, 0, W, 20);
-        bar(30, 6, W - 60, 8, "#FFFFFF");
-        c.strokeStyle = "#4E8FD1";
-        c.lineWidth = 3;
-        const cx = W / 2;
-        const cy = 68;
-        const r = 30;
-        c.beginPath();
-        c.arc(cx, cy, r, 0, Math.PI * 2);
-        c.stroke();
-        const phase = (t * 0.5) % 1;
-        for (const k of [phase, (phase + 0.5) % 1]) {
-          c.beginPath();
-          c.ellipse(cx, cy, r * Math.abs(Math.cos(k * Math.PI)), r, 0, 0, Math.PI * 2);
-          c.stroke();
-        }
-        c.beginPath();
-        c.moveTo(cx - r, cy);
-        c.lineTo(cx + r, cy);
-        c.stroke();
-        break;
-      }
-      case "delegating": {
-        fill("#2A2540");
-        for (let i = 0; i < 8; i++) {
-          const x = 22 + (i % 4) * 40;
-          const y = 26 + Math.floor(i / 4) * 40;
-          const on = (Math.sin(t * 3 + i * 1.7) + 1) / 2;
-          c.fillStyle = `rgba(217,119,87,${0.3 + on * 0.7})`;
-          c.beginPath();
-          c.roundRect(x, y, 28, 22, 6);
-          c.fill();
-        }
-        break;
-      }
-      case "tool": {
-        fill("#26303A");
-        for (let i = 0; i < 5; i++) {
-          const p = (Math.sin(t * 2 + i) + 1) / 2;
-          bar(16, 18 + i * 19, 40 + p * 110, 9, i % 2 ? "#8FB8DE" : "#7FD1B9");
-        }
-        break;
-      }
-      case "thinking": {
-        fill("#2B2433");
-        for (let i = 0; i < 3; i++) {
-          const p = Math.max(0, Math.sin(t * 4 - i * 0.9));
-          c.fillStyle = `rgba(232,138,107,${0.35 + p * 0.65})`;
-          c.beginPath();
-          c.arc(W / 2 + (i - 1) * 32, H / 2 - p * 8, 9 + p * 3, 0, Math.PI * 2);
-          c.fill();
-        }
-        break;
-      }
-      case "waiting": {
-        const on = frame % 10 < 6;
-        fill(on ? "#FFC83D" : "#E8A91C");
-        c.fillStyle = "#2B2110";
-        c.beginPath();
-        c.roundRect(W / 2 - 9, 20, 18, 52, 9);
-        c.fill();
-        c.beginPath();
-        c.arc(W / 2, 92, 10, 0, Math.PI * 2);
-        c.fill();
-        break;
-      }
-      case "done": {
-        fill("#DFF3E4");
-        c.strokeStyle = "#2F9E63";
-        c.lineWidth = 12;
-        c.lineCap = "round";
-        c.lineJoin = "round";
-        c.beginPath();
-        c.moveTo(62, 62);
-        c.lineTo(86, 84);
-        c.lineTo(132, 38);
-        c.stroke();
-        break;
-      }
-      case "idle": {
-        fill("#1E2530");
-        const x = Math.abs(((t * 22 + s) % (2 * (W - 36))) - (W - 36));
-        const y = Math.abs(((t * 15 + s * 3) % (2 * (H - 26))) - (H - 26));
-        c.fillStyle = "#D97757";
-        c.beginPath();
-        c.roundRect(x, y, 36, 26, 7);
-        c.fill();
-        c.fillStyle = "#1E2530";
-        c.fillRect(x + 10, y + 8, 4, 9);
-        c.fillRect(x + 22, y + 8, 4, 9);
-        break;
-      }
-      default:
-        fill("#12151B");
+  /** Redraws when something on it changes; `on` false is a monitor that is switched off. */
+  draw(agent: AgentSnapshot, on: boolean, t: number) {
+    if (!on) {
+      if (this.drawn === "off") return;
+      this.drawn = "off";
+      this.agent = null;
+      this.ctx.fillStyle = C.off;
+      this.ctx.fillRect(0, 0, W, H);
+      this.texture.needsUpdate = true;
+      return;
     }
+    if (agent !== this.agent) this.layout(agent);
+
+    const frame = Math.floor(t * 8);
+    const blink = Math.floor(t * 2) % 2 === 0;
+    const since = elapsed(Date.now() - this.turnStart);
+    const key = `${this.version}|${this.spinnerAt < 0 ? "" : `${frame}|${since}`}|${blink}`;
+    if (key === this.drawn) return;
+    this.drawn = key;
+
+    const rows = [...this.rows];
+    if (this.spinnerAt >= 0) rows[this.spinnerAt] = this.spinner(frame, since);
+
+    const c = this.ctx;
+    c.fillStyle = C.bg;
+    c.fillRect(0, 0, W, H);
+    c.textBaseline = "middle";
+    rows.slice(-ROWS).forEach((r, i) => {
+      const y = PAD_Y + i * LINE;
+      if (r.bg) {
+        c.fillStyle = r.bg;
+        c.fillRect(0, y, W, LINE);
+      }
+      let x = PAD_X;
+      for (const s of r.spans) {
+        if (s.fx === "cursor") {
+          if (blink) {
+            c.fillStyle = s.color;
+            c.fillRect(x, y + 1, this.charW, LINE - 2);
+          }
+        } else if (s.text.trim()) {
+          c.font = s.bold ? `bold ${FONT}` : FONT;
+          c.fillStyle = s.fx === "blink" && !blink ? C.faint : s.color;
+          c.fillText(s.text, x, y + LINE / 2);
+        }
+        x += s.text.length * this.charW;
+      }
+    });
     this.texture.needsUpdate = true;
+  }
+
+  /** "✻ Noodling… (12s · esc to interrupt)", with the shimmer that sweeps across the verb. */
+  private spinner(frame: number, since: string): Row {
+    const word = `${this.verb}…`;
+    const sweep = (frame % (word.length + 8)) - 4;
+    return row(
+      span(SPINNER[frame % SPINNER.length]!, C.claude),
+      span(" "),
+      ...[...word].map((ch, i) => span(ch, Math.abs(i - sweep) <= 1 ? C.shimmer : C.claude)),
+      span(` (${since} · esc to interrupt)`, C.dim),
+    );
   }
 
   dispose() {

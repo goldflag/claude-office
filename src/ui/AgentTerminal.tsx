@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import type { ActionEntry, AgentSnapshot } from "../../shared/types.ts";
-import { looksLikeDialog } from "../../shared/terminal.ts";
+import { block, looksLikeDialog } from "../../shared/terminal.ts";
 import { openInOrca, readScrollback, readTerminal, sendMessage } from "../api.ts";
 import { describeAgent, groupOf, tokens } from "../describe.ts";
 
@@ -62,33 +62,6 @@ function usePoll<T>(load: () => Promise<T>, ms: number, on: boolean, key: string
   }, [key, ms, on, nonce]);
 
   return { value, error, refresh: () => setNonce((n) => n + 1) };
-}
-
-/** Wraps one line of text to `width`, with a prefix on the first row and an indent on the rest. */
-function wrap(text: string, prefix: string, indent: string, width: number): string[] {
-  const lead = /^\s*/.exec(text)![0];
-  const out: string[] = [];
-  let line = prefix + lead;
-  let empty = true;
-  for (const word of text.split(/\s+/).filter(Boolean)) {
-    if (!empty && line.length + 1 + word.length > width) {
-      out.push(line);
-      line = indent + lead;
-      empty = true;
-    }
-    line += (empty ? "" : " ") + word;
-    empty = false;
-  }
-  out.push(line);
-  return out;
-}
-
-/** Wraps text that may run over several lines, dropping the markdown markers Claude Code would have rendered. */
-function block(text: string, prefix: string, indent: string, width: number): string[] {
-  return text
-    .replace(/\*\*|`/g, "")
-    .split("\n")
-    .flatMap((para, i) => wrap(para, i === 0 ? prefix : indent, indent, width));
 }
 
 /** Transcript entries drawn the way Claude Code draws them. */

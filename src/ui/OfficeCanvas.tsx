@@ -8,11 +8,13 @@ interface Props {
   sceneRef: RefObject<OfficeScene | null>;
   /** True while something covers the whole office, so it need not be drawn. */
   paused: boolean;
+  /** Whether the roster board covers part of the view. */
+  board: boolean;
   onSelect(id: string | null): void;
 }
 
 /** Mounts the three.js office and feeds it snapshots. */
-export function OfficeCanvas({ snapshot, timeMode, sceneRef, paused, onSelect }: Props) {
+export function OfficeCanvas({ snapshot, timeMode, sceneRef, paused, board, onSelect }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const latest = useRef({ snapshot, timeMode, paused, onSelect });
   latest.current = { snapshot, timeMode, paused, onSelect };
@@ -21,7 +23,7 @@ export function OfficeCanvas({ snapshot, timeMode, sceneRef, paused, onSelect }:
   useEffect(() => {
     let cancelled = false;
     let scene: OfficeScene | null = null;
-    OfficeScene.create(host.current!, { onSelect: (id) => latest.current.onSelect(id) })
+    OfficeScene.create(host.current!, { onSelect: (id) => latest.current.onSelect(id), board })
       .then((created) => {
         if (cancelled) return created.dispose();
         scene = created;
@@ -36,7 +38,7 @@ export function OfficeCanvas({ snapshot, timeMode, sceneRef, paused, onSelect }:
       scene?.dispose();
       sceneRef.current = null;
     };
-  }, [sceneRef]);
+  }, [sceneRef, board]);
 
   useEffect(() => {
     if (snapshot) sceneRef.current?.setSnapshot(snapshot);

@@ -64,6 +64,22 @@ export function describeAgent(agent: AgentSnapshot): string {
   return describeWork(agent.activity, agent.currentTool, agent.subagents.length);
 }
 
+/** Orca's default worktree names are slugs like "master" or "grouper"; real titles read like a phrase. */
+const SLUG = /^[a-z0-9._\/-]+$/;
+
+/**
+ * What the session is working on: the Orca worktree's title when someone gave
+ * it one, else Claude Code's own session title, else the last prompt.
+ */
+export function taskOf(agent: AgentSnapshot): string | null {
+  const orca = agent.orca?.worktreeName?.trim();
+  if (orca && !SLUG.test(orca)) return orca;
+  if (agent.title) return agent.title;
+  const prompt = agent.lastPrompt?.trim().replace(/\s+/g, " ");
+  if (!prompt) return null;
+  return prompt.length > 90 ? `${prompt.slice(0, 89)}…` : prompt;
+}
+
 export function ago(from: number, now = Date.now()): string {
   const s = Math.max(0, Math.round((now - from) / 1000));
   if (s < 60) return `${s}s`;

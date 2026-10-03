@@ -82,8 +82,7 @@ enum Settings {
     }
 }
 
-/// Popover sizes. Below 820 points wide the office stacks the board under the
-/// scene; Large is wide enough for the desktop layout.
+/// Popover sizes. They are square; a size taller than the screen is shrunk to fit.
 enum PopoverSize: String, CaseIterable {
     case small, medium, large
 
@@ -91,9 +90,9 @@ enum PopoverSize: String, CaseIterable {
 
     var size: NSSize {
         switch self {
-        case .small: NSSize(width: 460, height: 680)
-        case .medium: NSSize(width: 640, height: 860)
-        case .large: NSSize(width: 1100, height: 760)
+        case .small: NSSize(width: 640, height: 640)
+        case .medium: NSSize(width: 860, height: 860)
+        case .large: NSSize(width: 1180, height: 1180)
         }
     }
 }
